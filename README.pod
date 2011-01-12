@@ -1,0 +1,57 @@
+=head1 NAME
+
+perl-ssh-tools - a collection of parallel, forkbombing cluster ssh tools written in perl
+
+=head1 HISTORY
+
+I often work on clusters of machines where I need to do the same operation to many
+hosts at the same time.  I started out with regular shell loops:
+
+ for i in `seq -f '%02g' 1 20`
+ do
+    ssh root@hostname$i.dc.domain.com reboot
+ done
+
+This worked fine for about half a day.   Then I looked at DSH and simlar tools available
+and easy to find in 2007.  Over the course of time I built up cl-run.pl and a couple copies
+like cl-rsync.pl and cl-psgrep.pl.  It didn't take long and I split all the common bits
+out to a module and made it a bit more generic.  Then the rest of the tools were pretty
+trivial to throw together as I needed them.
+
+That's all to say, these tools work well for me but are not good examples of perl coding
+nor are they good for everybody.
+
+=head1 SYNOPSIS
+
+ cl-run.pl        # run a command or script
+ cl-rsync.pl      # parallel rsync
+ cl-sendfile.pl   # push a file out
+ cl-gatherfile.pl # pull a file in (sorted by hostname)
+ cl-ping.pl       # ping hosts
+ cl-killall.pl    # kill a process on hosts with a regular expression
+ cl-psgrep.pl     # look for processes across the cluster
+ cl-netstat.pl    # a distributed network I/O display
+
+=head1 INSTALLATION
+
+I usually just copy all these files into ~/bin.
+
+ mkdir ~/bin
+ cd ~/bin
+ git clone https://github.com/tobert/perl-ssh-tools.git
+ ln -s perl-ssh-tools/* .
+ export PATH=~/bin:$PATH
+
+=head1 SEE ALSO
+
+ cl-run.pl
+ cl-rsync.pl
+ cl-sendfile.pl
+ cl-gatherfile.pl
+ cl-ping.pl
+ cl-killall.pl
+ cl-psgrep.pl
+ cl-netstat.pl
+
+=cut
+
