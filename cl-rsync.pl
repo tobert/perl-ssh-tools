@@ -3,18 +3,18 @@ $|++;
 
 ###########################################################################
 #                                                                         #
-# Cluster Tools: rsync.pl                                                 #
-# Copyright 2007-2010, Albert P. Tobey <tobert@gmail.com>                 #
+# Cluster Tools: cl-rsync.pl                                              #
+# Copyright 2007-2011, Albert P. Tobey <tobert@gmail.com>                 #
 #                                                                         #
 ###########################################################################
 
 =head1 NAME
 
-rsync.pl - push files using rsync over ssh, in parallel
+cl-rsync.pl - push files using rsync over ssh, in parallel
 
 =head1 SYNOPSIS
 
- rsync.pl [-l $LOCAL_FILE] [-r $REMOTE_FILE] -b] [-t] [-d] [-a] [-n] [-x] [-h]
+ cl-rsync.pl [-l $LOCAL_FILE] [-r $REMOTE_FILE] -b] [-t] [-d] [-a] [-n] [-x] [-h]
 	-l: local file/directory to rsync - passed through unmodified to rsync
 	-r: remote location for rsync to write to - also unmodified
         -x: exclude files/directories (becomes --exclude= on rsync command line)
@@ -101,7 +101,7 @@ __END__
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2007-2010 by Al Tobey.
+This software is copyright (c) 2007-2011 by Al Tobey.
 
 This is free software; you can redistribute it and/or modify it under the terms
 of the Artistic License 2.0.  (Note that, unlike the Artistic License 1.0,

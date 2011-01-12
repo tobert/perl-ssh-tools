@@ -3,21 +3,21 @@ $|++;
 
 ###########################################################################
 #                                                                         #
-# Cluster Tools: run.pl                                                   #
-# Copyright 2007-2010, Albert P. Tobey <tobert@gmail.com>                 #
+# Cluster Tools: cl-run.pl                                                #
+# Copyright 2007-2011, Albert P. Tobey <tobert@gmail.com>                 #
 #                                                                         #
 ###########################################################################
 
 =head1 NAME
 
-run.pl - run commands in parallel across the cluster
+cl-run.pl - run commands in parallel across the cluster
 
 =head1 SYNOPSIS
 
 This script parallelizes ssh access to hosts.
 
- run.pl -s $SCRIPT    [-l $FILE] [-r $FILE] [-e $FILE] [-b] [-t] [-d] [-a] [-n] [-h]
- run.pl -c '$COMMAND' [-l $FILE] [-r $FILE] [-e $FILE] [-b] [-t] [-d] [-a] [-n] [-h]
+ cl-run.pl -s $SCRIPT    [-l $FILE] [-r $FILE] [-e $FILE] [-b] [-t] [-d] [-a] [-n] [-h]
+ cl-run.pl -c '$COMMAND' [-l $FILE] [-r $FILE] [-e $FILE] [-b] [-t] [-d] [-a] [-n] [-h]
         -s: script/program to copy out then run
         -c: command to run on each host
                 - this will be written to a mini shell script then pushed out
@@ -147,7 +147,7 @@ __END__
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2007-2010 by Al Tobey.
+This software is copyright (c) 2007-2011 by Al Tobey.
 
 This is free software; you can redistribute it and/or modify it under the terms
 of the Artistic License 2.0.  (Note that, unlike the Artistic License 1.0,

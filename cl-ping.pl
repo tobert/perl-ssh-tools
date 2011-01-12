@@ -3,18 +3,18 @@ $|++;
 
 ###########################################################################
 #                                                                         #
-# Cluster Tools: ping.pl                                                  #
-# Copyright 2007-2010, Albert P. Tobey <tobert@gmail.com>                 #
+# Cluster Tools: cl-ping.pl                                               #
+# Copyright 2007-2011, Albert P. Tobey <tobert@gmail.com>                 #
 #                                                                         #
 ###########################################################################
 
 =head1 NAME
 
-ping.pl - ping the cluster
+cl-ping.pl - ping the cluster
 
 =head1 SYNOPSIS
 
- ping.pl
+ cl-ping.pl
 
 =cut
 
@@ -41,7 +41,7 @@ __END__
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2007-2010 by Al Tobey.
+This software is copyright (c) 2007-2011 by Al Tobey.
 
 This is free software; you can redistribute it and/or modify it under the terms
 of the Artistic License 2.0.  (Note that, unlike the Artistic License 1.0,

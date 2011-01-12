@@ -3,18 +3,18 @@ $|++;
 
 ###########################################################################
 #                                                                         #
-# Cluster Tools: gather.pl                                                #
-# Copyright 2007-2010, Albert P. Tobey <tobert@gmail.com>                 #
+# Cluster Tools: cl-gatherfile.pl                                         #
+# Copyright 2007-2011, Albert P. Tobey <tobert@gmail.com>                 #
 #                                                                         #
 ###########################################################################
 
 =head1 NAME
 
-gather.pl - harvest files from remote systems
+cl-gatherfile.pl - harvest files from remote systems
 
 =head1 SYNOPSIS
 
- gather.pl [-a] -r $REMOTE_FILENAME -l $LOCAL_DIRECTORY
+ cl-gatherfile.pl [-a] -r $REMOTE_FILENAME -l $LOCAL_DIRECTORY
 	 -r: remote file to gather
 	 -l: local directory to write files to
 	 -a: append the hostname to the filename when writing it locally
@@ -80,7 +80,7 @@ __END__
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2007-2010 by Al Tobey.
+This software is copyright (c) 2007-2011 by Al Tobey.
 
 This is free software; you can redistribute it and/or modify it under the terms
 of the Artistic License 2.0.  (Note that, unlike the Artistic License 1.0,

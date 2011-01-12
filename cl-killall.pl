@@ -3,23 +3,23 @@ $|++;
 
 ###########################################################################
 #                                                                         #
-# Cluster Tools: killall.pl                                               #
-# Copyright 2007-2010, Albert P. Tobey <tobert@gmail.com>                 #
+# Cluster Tools: cl-killall.pl                                            #
+# Copyright 2007-2011, Albert P. Tobey <tobert@gmail.com>                 #
 #                                                                         #
 ###########################################################################
 
 =head1 NAME
 
-killall.pl - run killall across the cluster
+cl-killall.pl - run killall across the cluster
 
 =head1 SYNOPSIS
 
- killall.pl [-s SIG] [-d] [-h] $PROCESS_NAME
+ cl-killall.pl [-s SIG] [-d] [-h] $PROCESS_NAME
 	 -s: which signal to send (e.g. 9, HUP) 
      -h: show this help text
 
- killall.pl -s HUP init
- killall.pl -s 9 foobar
+ cl-killall.pl -s HUP init
+ cl-killall.pl -s 9 foobar
 
 =cut
 
@@ -68,7 +68,7 @@ __END__
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2007-2010 by Al Tobey.
+This software is copyright (c) 2007-2011 by Al Tobey.
 
 This is free software; you can redistribute it and/or modify it under the terms
 of the Artistic License 2.0.  (Note that, unlike the Artistic License 1.0,
