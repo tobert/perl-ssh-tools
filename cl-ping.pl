@@ -23,19 +23,19 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 
-
 use FindBin qw($Bin);
 use lib $Bin;
 use DshPerlHostLoop;
 
-
 func_loop( sub {
-	my $hostname = shift;
+    my $hostname = shift;
 
-	my @output = `ping -c 1 $hostname`;
+    my @out = `ping -c 1 $hostname 2>&1`;
 
-	print grep { m/bytes from $hostname/ } @output;
+    print grep {/bytes from/} @out;
 } );
+
+# vim: et ts=4 sw=4 ai smarttab
 
 __END__
 

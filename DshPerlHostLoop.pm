@@ -15,24 +15,32 @@ use Data::Dumper;
 use IPC::Open3;
 use IO::Select;
 use IO::Handle;
+use Sys::Hostname ();
 use base 'Exporter';
 
 BEGIN {
-    use vars qw( @opt_filter_excl @opt_filter_incl );
+    use vars qw( @opt_filter_excl @opt_filter_incl $host_group $remote_user );
 }
 
 our $ssh_options = "-o 'BatchMode yes' -o 'StrictHostKeyChecking no' -o 'ConnectTimeout 10'";
-our $tag_output;
+our $tag_output = 1;
 our %ssh2_connections;
+our $debug = undef;
 our $verbose;
-our $machinelist;
+our $tempdir = '/var/tmp';
+our $mainpid = $$;
+# can be overridden with --list $name
+our $machines_list ||= "$ENV{HOME}/.dsh/machines.list";
+our @tempfiles;
+our $remote_user ||= $ENV{USER};
+our $sshkey ||= "$ENV{HOME}/.ssh/id_rsa";
 
 # Most shops have a noisy /etc/issue.net. This reads the local issue.net
 # and removes any lines matching it from the output from ssh.
 my @issue = read_issue();
 my $issue_len = length(join("\n", @issue));
 
-our @EXPORT = qw(func_loop ssh scp hostlist reap $ssh_options tag_output @opt_filter_excl @opt_filter_incl verbose);
+our @EXPORT = qw(func_loop ssh scp hostlist reap $ssh_options tag_output @opt_filter_excl @opt_filter_incl $host_group verbose my_tempfile $remote_user);
 
 =head1 NAME
 
@@ -51,13 +59,13 @@ A few global CLI switches are implemented in this module in a BEGIN block.
 
  --incl - a perl regular expression that filters out non-matching hostnames
  --excl - a perl regular expression that filters matched hostnames out of the list
- -t     - tag output with the hostname
+ --list - name of the list, e.g. ~/.dsh/machines.$NAME
+ --root - set remote user to root
+ -u     - don't prefix output with the remote hostname
  -v     - verbose
  -m     - specify a file with a list of hosts to use (default is ~/.dsh/machines.list)
 
 --excl RE's are run before --incl RE's.
-
-=cut
 
 =head1 FUNCTIONS
 
@@ -73,31 +81,31 @@ Execute a callback in parallel for each host.   The first argument passed to eac
 =cut
 
 sub func_loop {
-	my $f = shift;
+    my $f = shift;
 
-	if ( ref($f) ne 'CODE' ) {
-		confess "Argument to DshPerlHostLoop must be a subroutine/closure.";
-	}
+    if ( ref($f) ne 'CODE' ) {
+        confess "Argument to DshPerlHostLoop must be a subroutine/closure.";
+    }
 
-	my %pids;
-	foreach my $hostname ( hostlist() ) {
-		my $pid = fork();
-		if ( $pid ) {
-			$pids{$hostname} = $pid;
-			next;
-		}
-		else {
-			eval { $0 = "$0 -- $hostname"; };
-			my @out = eval { $f->( $hostname ); };
-			if ( $@ ) {
-				confess $@;
-			}
+    my %pids;
+    foreach my $hostname ( hostlist() ) {
+        my $pid = fork();
+        if ( $pid ) {
+            $pids{$hostname} = $pid;
+            next;
+        }
+        else {
+            eval { $0 = "$0 -- $hostname"; };
+            my @out = eval { $f->( $hostname ); };
+            if ( $@ ) {
+                confess $@;
+            }
 
-			exit 0;
-		}
-	}
+            exit 0;
+        }
+    }
 
-	reap( \%pids );
+    reap( \%pids );
 }
 
 =item read_issue()
@@ -158,8 +166,8 @@ The actual function behind ssh/scp.
 
 # archaic & insecure but fast and convenient
 # in other words, don't let untrusted people sudo this!!
-sub ssh { scmd('/usr/bin/ssh', @_) }
-sub scp { scmd('/usr/bin/scp', '-v', @_) }
+sub ssh { scmd('/usr/bin/ssh', '-o', "'User $remote_user'", @_) }
+sub scp { scmd('/usr/bin/scp', '-o', "'User $remote_user'", '-v', @_) }
 sub scmd {
     my $scmd = shift;
 
@@ -231,40 +239,36 @@ then filters it based on --excl and --incl regular expressions.
 =cut
 
 sub hostlist {
-	my @hostlist;
-
-    if (not defined $machinelist or length $machinelist == 0) {
-        $machinelist = "$ENV{HOME}/.dsh/machines.list";
-    }
-
-    open( my $fh, "< $machinelist")
-        or die "Could not open machine list file '$machinelist' for reading: $!";
+    my @hostlist;
+    open( my $fh, "< $machines_list" )
+        or die "Could not open machine list file '$machines_list' for reading: $!";
 
     HOST: while ( my $hostname = <$fh> ) {
         chomp $hostname;
         $hostname =~ s/\s//g;
+        $hostname =~ s/#.*$//g;
         next unless ( length $hostname );
         next if ( $hostname =~ /^#/ );
 
         FILTER_EX: foreach my $excl ( @opt_filter_excl ) {
-		    if ( $hostname =~ /$excl/ ) {
-			    print "DshPerlHostLoop: Skipping $hostname because it matched filter $excl.\n" if ( $verbose );
-			    next HOST;
-		    }
+            if ( $hostname =~ /$excl/ ) {
+                print "DshPerlHostLoop: Skipping $hostname because it matched filter $excl.\n" if ( $debug );
+                next HOST;
+            }
         }
         FILTER_IN: foreach my $incl ( @opt_filter_incl ) {
-		    if ( $hostname !~ /$incl/i ) {
-			    print "DshPerlHostLoop: Skipping $hostname because it didn't match filter $incl.\n" if ( $verbose );
-			    next HOST;
-		    }
+            if ( $hostname !~ /$incl/i ) {
+                print "DshPerlHostLoop: Skipping $hostname because it didn't match filter $incl.\n" if ( $debug );
+                next HOST;
+            }
         }
 
-		push @hostlist, $hostname;
-	}
+        push @hostlist, $hostname;
+    }
 
     close $fh;
 
-	return @hostlist;
+    return @hostlist;
 }
 
 =item reap()
@@ -276,11 +280,11 @@ Reap child processes from the forkbomb. The hash is { $hostname => $pid }.
 =cut
 
 sub reap {
-	my $pids = shift;
-	foreach my $host ( keys %$pids ) {
-		waitpid( $pids->{$host}, 0 );
-		delete $pids->{$host};
-	}
+    my $pids = shift;
+    foreach my $host ( keys %$pids ) {
+        waitpid( $pids->{$host}, 0 );
+        delete $pids->{$host};
+    }
 }
 
 =item tag_output()
@@ -290,10 +294,10 @@ Toggle/get whether or not output should be prefixed with the hostname.
 =cut
 
 sub tag_output {
-	if ( @_ == 1 ) {
-		$tag_output = shift;
-	}
-	return $tag_output;
+    if ( @_ == 1 ) {
+        $tag_output = shift;
+    }
+    return $tag_output;
 }
 
 =item verbose()
@@ -312,42 +316,112 @@ sub verbose {
 # nasty brute force argument stealing :)
 # BEGIN makes sure this runs before Getopt::* as long as that module
 # isn't also called from within a BEGIN block
-BEGIN {
-	my @to_kill;
+BEGIN { 
+    my @to_kill;
 
-	for ( my $i=0; $i<@main::ARGV; $i++ ) {
+    for ( my $i=0; $i<@main::ARGV; $i++ ) {
         # skip anything after -- by itself, just like GNU convention
         # don't remove it though, so GetOptions can have a whack at processing
         last if ( $main::ARGV[$i] eq '--' );
 
-		if ( $main::ARGV[$i] eq '--incl' || $main::ARGV[$i] eq '-i' ) {
-			push @to_kill, $i, $i+1;
-			my $f = $main::ARGV[$i+1];
-			push @opt_filter_incl, qr/$f/;
-		}
-		if ( $main::ARGV[$i] eq '--excl' ) {
-			push @to_kill, $i, $i+1;
-			my $f = $main::ARGV[$i+1];
-			push @opt_filter_excl, qr/$f/;
-		}
-		if ( $main::ARGV[$i] eq '-m' ) {
-			push @to_kill, $i, $i+1;
-            $machinelist = $main::ARGV[$i+1];
-		}
-		if ( $main::ARGV[$i] eq '-t' ) {
-			push @to_kill, $i;
-			$tag_output = 1;
-		}
-		if ( $main::ARGV[$i] eq '-v' ) {
-			push @to_kill, $i;
-            $verbose = 1;
-		}
-	}
+        if ( $main::ARGV[$i] eq '--list' ) {
+            push @to_kill, $i, $i+1;
+            my $list = $main::ARGV[$i+1];
 
-	# do them in reverse order
-	foreach my $idx ( reverse sort @to_kill ) {
-		delete $main::ARGV[$idx];
-	}
+            # absolute path
+            if ( -f $list ) {
+                $machines_list = $list;
+            }
+            # short name
+            elsif ( -f "$ENV{HOME}/.dsh/machines.$list" ) {
+                $machines_list = "$ENV{HOME}/.dsh/machines.$list";
+            }
+            else {
+                die "Could not read machine list in '$list' or '~/.dsh/machines.$list': $!";
+            }
+        }
+
+        if ( $main::ARGV[$i] eq '--incl' || $main::ARGV[$i] eq '-i' ) {
+            push @to_kill, $i, $i+1;
+            my $f = $main::ARGV[$i+1];
+            push @opt_filter_incl, qr/$f/;
+        }
+        if ( $main::ARGV[$i] eq '--excl' ) {
+            push @to_kill, $i, $i+1;
+            my $f = $main::ARGV[$i+1];
+            push @opt_filter_excl, qr/$f/;
+        }
+        if ( $main::ARGV[$i] eq '-u' ) {
+            push @to_kill, $i;
+            $tag_output = undef;
+        }
+        if ( $main::ARGV[$i] eq '-g' ) {
+            push @to_kill, $i, $i+1;
+            $host_group = $main::ARGV[$i+1];
+        }
+        if ( $main::ARGV[$i] eq '-i' ) {
+            push @to_kill, $i, $i+1;
+            my $sshkey = $main::ARGV[$i+1];
+            $ssh_options .= " -o 'IdentityFile $sshkey'";
+        }
+        if ( $main::ARGV[$i] eq '-v' ) {
+            push @to_kill, $i;
+            $verbose = 1;
+        }
+        if ( $main::ARGV[$i] eq '--root' ) {
+          push @to_kill, $i;
+          $remote_user = 'root';
+        }
+    }
+
+    # do them in reverse order
+    foreach my $idx ( reverse sort @to_kill ) {
+        delete $main::ARGV[$idx];
+    }
+}
+
+=item my_tempfile()
+
+Not secure. Generates a parseable-by-humans tempfile so people can
+tell what junk in /tmp is from.
+
+=cut
+
+sub my_tempfile {
+    my @parts;
+
+    if ($ENV{USER} and $ENV{USER} ne 'root') {
+        push @parts, $ENV{USER};
+    }
+
+    push @parts, basename($0);
+    push @parts, Sys::Hostname::hostname;
+    push @parts, CORE::time;
+
+    my $filename = $tempdir . '/' . join('-', @parts);
+
+    open(my $fh, "> $filename")
+        or die "Couldn't open tempfile for write: $!";
+
+    push @tempfiles, $filename;
+
+    return($fh, $filename);
+}
+
+END {
+    if ($$ == $mainpid) {
+        if (($verbose or $debug) and @tempfiles > 0) {
+            printf STDERR "Leaving tempfiles in /tmp. They are:\n\t%s\n",
+            join("\n\t", @tempfiles);
+        }
+        else {
+            foreach my $tf (@tempfiles) {
+                if ($tf =~ m#^$tempdir#) {
+                    unlink($tf);
+                }
+            }
+        }
+    }
 }
 
 1;
@@ -355,8 +429,6 @@ BEGIN {
 # vim: et ts=4 sw=4 ai smarttab
 
 __END__
-
-=back
 
 =head1 COPYRIGHT AND LICENSE
 

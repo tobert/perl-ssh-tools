@@ -40,7 +40,6 @@ use warnings;
 use Pod::Usage;
 use Getopt::Long;
 use File::Copy qw( copy );
-use File::Temp qw/tempfile/;
 use Fcntl ':flock';
 use IO::Handle;
 
@@ -61,87 +60,92 @@ our $script           = undef;
 our $help             = undef;
 
 GetOptions(
-	"s=s" => \$script,
-	"c=s" => \$command,
-	"l=s" => \$local_output,
-	"r=s" => \$remote_output,
-	"e=s" => \$errfile,
-	"b"   => \$background,
-	"n:i" => \$slaves,
-	"h"   => \$help
+    "s=s" => \$script,
+    "c=s" => \$command,
+    "l=s" => \$local_output,
+    "r=s" => \$remote_output,
+    "e=s" => \$errfile,
+    "b"   => \$background,
+    "n:i" => \$slaves,
+    "h"   => \$help
 );
 
 $tag_local_output = tag_output();
 
 if ( $help || (!$command && !$script) ) {
-	pod2usage();
+    pod2usage();
 }
 
 if ( $script && $command ) {
-	pod2usage( -message => "-s and -c are mutually exclusive" );
+    pod2usage( -message => "-s and -c are mutually exclusive" );
 }
 
-my( $fh, $cmdfile ) = tempfile();
+my( $fh, $cmdfile ) = my_tempfile();
 if ( $command ) {
-	print $fh "#!/bin/bash\n";
-	print $fh "cd /var/tmp\n";
-	if ( $remote_output ) {
-		print $fh "outfile=$remote_output\n";
-	}
-	else {
-		print $fh "outfile=/tmp/`hostname`.output\n";
-	}
-	print $fh "rm -f \$outfile\n";
-	if ( $background ) {
-		print $fh "nohup $command &\n";
-	}
-	else {
-		print $fh "$command\n";
-	}
-	print $fh "rm -f $cmdfile\n";
-	close $fh;
+    print $fh "#!/bin/bash\n";
+    print $fh "cd /var/tmp\n";
+    if ( $remote_output ) {
+        print $fh "outfile=$remote_output\n";
+    }
+    else {
+        print $fh "outfile=/tmp/`hostname`.output\n";
+    }
+    print $fh "rm -f \$outfile\n";
+    if ( $background ) {
+        print $fh "nohup $command &\n";
+    }
+    else {
+        print $fh "$command\n";
+    }
+    print $fh "rm -f $cmdfile\n";
+    close $fh;
 }
 else {
-	close $fh;
-	copy( $script, $cmdfile );
-	chmod( 0755, $cmdfile );
+    close $fh;
+    copy( $script, $cmdfile );
+    chmod( 0755, $cmdfile );
 }
 
 func_loop( \&runit );
 
 sub runit {
-	my $host = shift;
+    my $host = shift;
 
-    system( "/usr/bin/scp -q $ssh_options $cmdfile $host:$cmdfile" );
+    my $scp = "/usr/bin/scp -q $ssh_options $cmdfile $remote_user\@$host:$cmdfile";
+    if (verbose()) {
+        $scp =~ s/scp -q/scp/;
+        print STDERR "COMMAND: $scp\n" if ( verbose() );
+    }
+    system( $scp );
 
-	print STDERR "$host: /bin/bash $cmdfile\n" if ( verbose() );
+    #my @out = `/usr/bin/ssh $ssh_options $host /bin/bash $cmdfile`;
+    my @out = ssh( "$remote_user\@$host", "/bin/bash $cmdfile" );
+    my $fh;
+    if ( $local_output ) {
+        open( $fh, ">> $local_output" );
+        flock( $fh, LOCK_EX );
+        seek( $fh, 0, 2 );
+    }
+    else {
+        $fh = IO::Handle->new_from_fd( fileno(STDOUT), 'w' );
+    }
 
-	#my @out = `/usr/bin/ssh $ssh_options $host /bin/bash $cmdfile`;
-    my @out = ssh( $host, "/bin/bash $cmdfile" );
-	my $fh;
-	if ( $local_output ) {
-		open( $fh, ">> $local_output" );
-		flock( $fh, LOCK_EX );
-		seek( $fh, 0, 2 );
-	}
-	else {
-		$fh = IO::Handle->new_from_fd( fileno(STDOUT), 'w' );
-	}
+    if ( $tag_local_output ) {
+        for my $line ( @out ) {
+            print $fh "$host: $line\n";
+        }
+    }
+    else {
+        print $fh join("\n",@out), "\n";
+    }
 
-	if ( $tag_local_output ) {
-		for my $line ( @out ) {
-			print $fh "$host: $line\n";
-		}
-	}
-	else {
-		print $fh join("\n",@out), "\n";
-	}
+    flock( $fh, LOCK_UN ) if ( $local_output );
+    close $fh;
 
-	flock( $fh, LOCK_UN ) if ( $local_output );
-	close $fh;
-
-	exit 0;
+    exit 0;
 }
+
+# vim: et ts=4 sw=4 ai smarttab
 
 __END__
 

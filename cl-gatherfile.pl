@@ -15,13 +15,13 @@ cl-gatherfile.pl - harvest files from remote systems
 =head1 SYNOPSIS
 
  cl-gatherfile.pl [-a] -r $REMOTE_FILENAME -l $LOCAL_DIRECTORY
-	 -r: remote file to gather
-	 -l: local directory to write files to
-	 -a: append the hostname to the filename when writing it locally
-	 -d: only gather from hosts
-	 -n: number of hosts to gather from
-	 -v: verbose mode
-	 -h: show this help text\n
+     -r: remote file to gather
+     -l: local directory to write files to
+     -a: append the hostname to the filename when writing it locally
+     -d: only gather from hosts
+     -n: number of hosts to gather from
+     -v: verbose mode
+     -h: show this help text\n
 
 =cut
 
@@ -43,31 +43,31 @@ our $append_hostname  = undef;
 our $help             = undef;
 
 GetOptions(
-	"l=s" => \$local_dir,
-	"r=s" => \$remote_file,
-	"a"   => \$append_hostname,
-	"d"   => \$host_cmd,
-	"h"   => \$help
+    "l=s" => \$local_dir,
+    "r=s" => \$remote_file,
+    "a"   => \$append_hostname,
+    "d"   => \$host_cmd,
+    "h"   => \$help
 );
 
 unless ( ($local_dir && $remote_file && -r $local_dir) || $help ) {
-	pod2usage();
+    pod2usage();
 }
 
 unless ( -d $local_dir || mkdir($local_dir) ) {
-	pod2usage( -message => "Local directory '$local_dir' does not exist and could not be created." );
+    pod2usage( -message => "Local directory '$local_dir' does not exist and could not be created." );
 }
 
 func_loop( \&runit );
 
 sub runit {
-	my $host = shift;
+    my $host = shift;
     my $remote = "$host:$remote_file";
     my $dest = $local_dir;
 
     if ( $append_hostname ) {
-	    my $file = basename( $remote_file );
-	    $dest = "$local_dir/$host-$file";
+        my $file = basename( $remote_file );
+        $dest = "$local_dir/$host-$file";
     }
 
     print STDERR "Command($$): /usr/bin/scp -q $ssh_options $remote $dest\n" if ( verbose() );
@@ -75,6 +75,8 @@ sub runit {
 }
 
 exit 0;
+
+# vim: et ts=4 sw=4 ai smarttab
 
 __END__
 

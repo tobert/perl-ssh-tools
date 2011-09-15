@@ -20,9 +20,9 @@ and some (like -t) are implied.    Most of the time, the very simplest usage is 
  cl-psgrep.pl -a snmpd # grep on everything
 
  cl-psgrep.pl [-d] [-a] [-b] [-n] [-x]
-	-a: run commands on all hosts (frontends and storage)
-	-n: number of domUs to run on
-	-h: print this message
+    -a: run commands on all hosts (frontends and storage)
+    -n: number of domUs to run on
+    -h: print this message
 
 =cut
 
@@ -33,14 +33,10 @@ use FindBin qw($Bin);
 use lib $Bin;
 use DshPerlHostLoop;
 
-our $help             = undef;
-
-GetOptions(
-	"h"   => \$help
-);
-
+our $help;
+GetOptions( "h" => \$help );
 if ( $help ) {
-	pod2usage();
+    pod2usage();
 }
 pod2usage() if ( @ARGV == 0 );
 
@@ -50,17 +46,19 @@ $proc =~ s/^(.)/[$1]/;
 func_loop( \&runit );
 
 sub runit {
-	my $host = shift;
+    my $host = shift;
 
-    my @out = ssh( $host, "ps -eo pid,args" );
-	my $fh;
-	for my $line ( @out ) {
+    my @out = ssh( $remote_user.'@'.$host, "ps -eo pid,args" );
+    my $fh;
+    for my $line ( @out ) {
         next unless ( $line =~ /$proc/ );
-		print "$host: $line\n";
-	}
+        print "$host: $line\n";
+    }
 
-	exit 0;
+    exit 0;
 }
+
+# vim: et ts=4 sw=4 ai smarttab
 
 __END__
 

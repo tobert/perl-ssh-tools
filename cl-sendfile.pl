@@ -14,8 +14,8 @@ cl-sendfile.pl - push a file over scp, in parallel
 
 =head1 SYNOPSIS
 
-Send files to cluster nodes.   This also archives those files in the ~/files/ to make tracking changes to the cluster
-from default installs a little easier.
+Send files to cluster nodes.   This also archives those files in the /root/files to make tracking changes to the cluster
+from default installs easier.
 
  cl-sendfile.pl -a -l /etc/httpd/conf/httpd.conf
  cl-sendfile.pl -d -l /tmp/foo.conf -r /usr/local/etc/foo.conf
@@ -45,35 +45,37 @@ our $remote_file      = undef;
 our $help             = undef;
 
 GetOptions(
-	"l=s" => \$local_file,
-	"r=s" => \$remote_file,
-	"n:i" => \$slaves,
-	"h"   => \$help
+    "l=s" => \$local_file,
+    "r=s" => \$remote_file,
+    "n:i" => \$slaves,
+    "h"   => \$help
 );
 
 if ( !$remote_file && $local_file && $local_file =~ m#^/# ) {
-	$remote_file = $local_file;
+    $remote_file = $local_file;
 }
 
 unless ( ($local_file && $remote_file && -r $local_file) || $help ) {
-	pod2usage();
+    pod2usage();
 }
 
 # save all the files sent out to a local tree so it's easy to reproduce the cluster
-my $dir = dirname( $remote_file );
-system( "mkdir -p $ENV{HOME}/files/$dir" ) unless ( -d "$ENV{HOME}/files/$dir" );
-copy( $local_file, "$ENV{HOME}/files/$remote_file" );
+#my $dir = dirname( $remote_file );
+#system( "mkdir -p $ENV{HOME}/files/$dir" );
+#copy( $local_file, "$ENV{HOME}/files/$remote_file" );
 
 if ( $slaves ) {
-	set_host_count( $slaves );
+    set_host_count( $slaves );
 }
 
 my $routine = sub {
-	my $hostname = shift;
+    my $hostname = shift;
     scp( $local_file, "$hostname:$remote_file" );
 };
 
 func_loop( $routine );
+
+# vim: et ts=4 sw=4 ai smarttab
 
 __END__
 

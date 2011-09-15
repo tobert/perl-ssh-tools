@@ -15,7 +15,7 @@ cl-killall.pl - run killall across the cluster
 =head1 SYNOPSIS
 
  cl-killall.pl [-s SIG] [-d] [-h] $PROCESS_NAME
-	 -s: which signal to send (e.g. 9, HUP) 
+     -s: which signal to send (e.g. 9, HUP) 
      -h: show this help text
 
  cl-killall.pl -s HUP init
@@ -38,19 +38,19 @@ our $help          = undef;
 our $command       = '/usr/bin/killall ';
 
 GetOptions(
-	"s:s" => \$signal,
-	"h"   => \$help
+    "s:s" => \$signal,
+    "h"   => \$help
 );
 
 if ( $help ) {
-	pod2usage();
+    pod2usage();
 }
 unless ( @ARGV > 0 ) {
-	pod2usage( -message => "Not enough arguments.   At least a program name to kill is required." );
+    pod2usage( -message => "Not enough arguments.   At least a program name to kill is required." );
 }
 
 if ( $signal ) {
-	pod2usage( -message => "Invalid signal '$signal'." )
+    pod2usage( -message => "Invalid signal '$signal'." )
         unless ( looks_like_number($signal) or $signal =~ /^(?:HUP|USR1|USR2)$/ );
         
     $command .= "-$signal ";
@@ -63,6 +63,8 @@ sub runit {
     $command .= join(' ', @ARGV);
     my @out = ssh( $host, $command );
 }
+
+# vim: et ts=4 sw=4 ai smarttab
 
 __END__
 

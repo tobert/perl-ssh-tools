@@ -15,8 +15,8 @@ cl-rsync.pl - push files using rsync over ssh, in parallel
 =head1 SYNOPSIS
 
  cl-rsync.pl [-l $LOCAL_FILE] [-r $REMOTE_FILE] -b] [-t] [-d] [-a] [-n] [-x] [-h]
-	-l: local file/directory to rsync - passed through unmodified to rsync
-	-r: remote location for rsync to write to - also unmodified
+    -l: local file/directory to rsync - passed through unmodified to rsync
+    -r: remote location for rsync to write to - also unmodified
         -x: exclude files/directories (becomes --exclude= on rsync command line)
         -n: number of hosts to run on
         -v: verbose output
@@ -43,59 +43,70 @@ our $dryrun           = undef;
 our $delete           = undef;
 
 GetOptions(
-	"l=s"  => \$local_file,
-	"r=s"  => \$remote_file,
-	"h"    => \$help,
-	"x=s@" => \$exclude,
-	"z"    => \$dryrun,
-	"delete" => \$delete
+    "l=s"  => \$local_file,
+    "r=s"  => \$remote_file,
+    "h"    => \$help,
+    "help" => \$help,
+    "x=s@" => \$exclude,
+    "z"    => \$dryrun,
+    "delete" => \$delete
 );
+
+if (!$local_file) {
+    pod2usage({ -message => "no local file specified. dangerous!", -exitval => 1 });
+}
+if ($help) {
+    pod2usage({ -message => "no args. dangerous!", -exitval => 1 });
+}
 
 #print "L: $local_file, R: $remote_file\n";
 
 #if ( @ARGV == 0 or not defined $local_file or not defined $remote_file or not -r $local_file or $help ) {
-#	pod2usage();
+#    pod2usage();
 #}
 
 if ( $delete ) {
-	$delete = '--delete';
+    $delete = '--delete';
 }
 else {
-	$delete = '';
+    $delete = '';
 }
 
 if ( !$exclude ) {
-	$exclude = '';
+    $exclude = '';
 }
 else {
-	if ( ref $exclude eq 'ARRAY' ) {
-		my @excopy = @$exclude;
-		$exclude = '';
-		foreach my $ex ( @excopy ) {
-			$exclude .= " --exclude '$ex' ";
-		}
-	}
-	else {
-		$exclude = "--exclude '$exclude'";
-	}
+    if ( ref $exclude eq 'ARRAY' ) {
+        my @excopy = @$exclude;
+        $exclude = '';
+        foreach my $ex ( @excopy ) {
+            $exclude .= " --exclude '$ex' ";
+        }
+    }
+    else {
+        $exclude = "--exclude '$exclude'";
+    }
 }
 
 if ( $dryrun ) {
-	$dryrun = ' --dry-run ';
+    $dryrun = ' --dry-run ';
 }
 else {
-	$dryrun = '';
+    $dryrun = '';
 }
 
 my $routine = sub {
-	my $hostname = shift;
-	if ( $dryrun ne '' ) {
-		print STDERR "rsync $dryrun $delete $exclude -ave \"ssh $ssh_options\" $local_file root\@$hostname:$remote_file\n";
-	}
-	system( "rsync $dryrun $delete $exclude -ave \"ssh $ssh_options\" $local_file root\@$hostname:$remote_file" );
+    my $hostname = shift;
+  my $command = "rsync $dryrun $delete $exclude -ave \"ssh $ssh_options\" $local_file $remote_user\@$hostname:$remote_file";
+    if ( $dryrun ne '' ) {
+        print STDERR "$command\n";
+    }
+    system( $command );
 };
 
 func_loop( $routine );
+
+# vim: et ts=4 sw=4 ai smarttab
 
 __END__
 
