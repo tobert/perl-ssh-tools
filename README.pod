@@ -21,6 +21,13 @@ trivial to throw together as I needed them.
 That's all to say, these tools work well for me but are not good examples of perl coding
 nor are they good for everybody.
 
+=head1 SCALABILITY
+
+I've had good luck using most of these tools on 300+ hosts at a time from a bastion
+host with 8G of RAM and plenty of available CPU cycles. Currently I run these all the
+time from a smallish Linux VM (2G RAM, 2 vcpus), my workstation, and my Macbook Air and
+haven't ever had a problem with performance.
+
 =head1 SYNOPSIS
 
  cl-run.pl        # run a command or script
