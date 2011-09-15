@@ -32,6 +32,68 @@ nor are they good for everybody.
  cl-psgrep.pl     # look for processes across the cluster
  cl-netstat.pl    # a distributed network I/O display
 
+=head1 EXAMPLES
+
+ $> cat > ~/.dsh/machines.nosqldb-dev <<EOF
+ nosqldb-dev12.tobert.org
+ nosqldb-dev11.tobert.org
+ nosqldb-dev10.tobert.org
+ nosqldb-dev9.tobert.org
+ nosqldb-dev8.tobert.org
+ nosqldb-dev7.tobert.org
+ nosqldb-dev6.tobert.org
+ nosqldb-dev5.tobert.org
+ nosqldb-dev4.tobert.org
+ nosqldb-dev3.tobert.org
+ nosqldb-dev2.tobert.org
+ nosqldb-dev1.tobert.org
+ EOF
+
+ # set default list to save typing, I generally do not use this
+ $> ln -sf ~/.dsh/machines.nosqldb-dev ~/.dsh/machines.list
+
+ # set up a user account (cheezy example, assumes user@localhost has root@remotehost keys set up)
+ $> cl-run.pl --root -c "useradd -m tobert"
+ $> cl-rsync.pl --root -l ~/.ssh -r /home/tobert
+ $> cl-run.pl --root -c "chown -R tobert /home/tobert"
+ $> cl-run.pl --root -c "(grep -q '^tobert' /etc/sudoers) || echo 'tobert ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers"
+
+ $> cl-run.pl --list nosqldb-dev.pl -c "uname -a"
+ nosqldb-dev12.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #31-Ubuntu SMP Wed May 18 14:10:36 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev1.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #31-Ubuntu SMP Wed May 18 14:10:36 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev11.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #31-Ubuntu SMP Wed May 18 14:10:36 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev5.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #31-Ubuntu SMP Wed May 18 14:10:36 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev2.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #31-Ubuntu SMP Wed May 18 14:10:36 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev4.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #36-Ubuntu SMP Fri Jul 8 18:12:30 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev6.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #36-Ubuntu SMP Fri Jul 8 18:12:30 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev10.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #31-Ubuntu SMP Wed May 18 14:10:36 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev3.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #36-Ubuntu SMP Fri Jul 8 18:12:30 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev8.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #31-Ubuntu SMP Wed May 18 14:10:36 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev9.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #31-Ubuntu SMP Wed May 18 14:10:36 UTC 2011 x86_64 GNU/Linux
+ nosqldb-dev7.tobert.org: Linux ip-xx-xx-xx-xx 2.6.32-316-ec2 #31-Ubuntu SMP Wed May 18 14:10:36 UTC 2011 x86_64 GNU/Linux
+
+ $> cl-run.pl -c "sudo nohup dd if=/dev/zero of=/dev/null bs=1M &"
+
+ $> cl-netstat.pl --list nosqldb-dev --device md3
+
+ hostname:         eth0_total     eth0_recv     eth0_send     read_iops     write_iops      1min  5min 15min
+ --------------------------------------------------------------------------------------------------------------
+ nosqldb-dev12:          864           121           743           0/s            0/s      0.00  0.00  0.00
+ nosqldb-dev11:          864           121           743           0/s            0/s      0.00  0.00  0.00
+ nosqldb-dev10:          846           121           725           0/s            0/s      0.00  0.00  0.00
+ nosqldb-dev9:           840           128           712           0/s      111,608/s      1.00  1.01  1.00
+ nosqldb-dev8:           827           117           710           0/s      120,828/s      1.04  1.03  1.00
+ nosqldb-dev7:           999           175           824           0/s       93,479/s      1.02  1.03  1.00
+ nosqldb-dev6:         1,674           201         1,473           0/s            0/s      0.00  0.00  0.00
+ nosqldb-dev5:           947           136           811           0/s            0/s      0.00  0.00  0.00
+ nosqldb-dev4:         1,674           201         1,473           0/s            0/s      0.00  0.00  0.00
+ nosqldb-dev3:           961           136           825           0/s            0/s      0.00  0.00  0.00
+ nosqldb-dev2:           961           136           825           0/s            0/s      0.00  0.00  0.00
+ nosqldb-dev1:           967           136           831           0/s            0/s      0.00  0.00  0.00
+ Total:          12,424         Recv:        1,729     Send:       10,695    (0 mbit/s) |        0 read/s  325,915 write/s
+ Average:        12,828         Recv:          151     Send:          917    (0 mbit/s) |        0 read/s  129,660 write/s
+
+
 =head1 INSTALLATION
 
 I usually just copy all these files into ~/bin.
@@ -41,6 +103,16 @@ I usually just copy all these files into ~/bin.
  git clone https://github.com/tobert/perl-ssh-tools.git
  ln -s perl-ssh-tools/* .
  export PATH=~/bin:$PATH
+
+=head1 NETSTAT SETUP
+
+I keep my primary ssh key encrypted like any good boy should. Since Net::SSH2 doesn't support ssh-agent,
+I use a secondary key in ~/.ssh/monitor-rsa that is restricted to only support cl-netstat.pl. It looks something like the following.
+
+ ssh-keygen -t rsa -f ~/.ssh/monitor-rsa -N ''
+ echo "no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,command=\"/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats\" $(< ~/.ssh/monitor-rsa.pub)" >> ~/.ssh/authorized_keys
+ cl-sendfile.pl --list cassandra-rec -l ~/.ssh/authorized_keys -r /home/$USER/.ssh/authorized_keys
+ # or distribute however you prefer
 
 =head1 SEE ALSO
 
@@ -64,7 +136,7 @@ cl-netstat.pl
 
 =head1 AUTHORS
 
- Al Tobey <tobert@gmail.com>
+Al Tobey <tobert@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
