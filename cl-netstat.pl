@@ -312,13 +312,13 @@ sub libssh2 {
         # my monitor-rsa key is unencrypted to work with Net::SSH2
         # it is restricted to '/bin/cat /proc/net/dev etc.' though so very low risk
         [
-            $ENV{USER},
+            $remote_user,
             $ENV{HOME}.'/.ssh/monitor-rsa.pub',
             $ENV{HOME}.'/.ssh/monitor-rsa'
         ],
         # the normal setup - ssh-agent isn't supported yet
         [
-            $ENV{USER},
+            $remote_user,
             $ENV{HOME}.'/.ssh/id_rsa.pub',
             $ENV{HOME}.'/.ssh/id_rsa'
         ]
