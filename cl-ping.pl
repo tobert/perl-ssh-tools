@@ -30,7 +30,11 @@ use DshPerlHostLoop;
 func_loop( sub {
     my $hostname = shift;
 
-    my @out = `ping -c 1 $hostname 2>&1`;
+    my @out = `ping -c 1 -W 2 $hostname 2>&1`;
+
+    if ($? != 0) {
+      print "DOWN: $hostname\n";
+    }
 
     print grep {/bytes from/} @out;
 } );
