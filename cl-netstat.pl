@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+$| = 1;
 
 ###########################################################################
 #                                                                         #
@@ -51,21 +52,33 @@ use Pod::Usage;
 use Getopt::Long;
 use Time::HiRes qw(time);
 use Data::Dumper;
+# use a libssh2 (Net::SSH2) instead of shelling out to ssh
+# it's a lot more efficient over the long times this can be
+# left running
 use Net::SSH2;
 
 use FindBin qw($Bin);
 use lib $Bin;
 use DshPerlHostLoop;
 
-our @interfaces;
-
-# use a libssh2 (Net::SSH2) instead of shelling out to ssh
-# it's a lot more efficient over the long times this can be
-# left running
+use constant BLACK   => "\x1b[30m";
+use constant RED     => "\x1b[31m";
+use constant GREEN   => "\x1b[32m";
+use constant YELLOW  => "\x1b[33m";
+use constant BLUE    => "\x1b[34m";
+use constant MAGENTA => "\x1b[35m";
+use constant CYAN    => "\x1b[36m";
+use constant WHITE   => "\x1b[37m";
+use constant DKGRAY  => "\x1b[1;30m";
+use constant DKRED   => "\x1b[1;31m";
+use constant RESET   => "\x1b[0m";
 
 my @ssh;
+our @interfaces;
 my @sorted_host_list;
 our $hostname_pad = 12;
+our %retries;
+our $retry_wait = 30;
 our( $opt_device, $opt_tolerant, $opt_interval );
 
 GetOptions(
@@ -79,27 +92,29 @@ $opt_interval ||= 2;
 foreach my $host ( reverse hostlist() ) {
     # connect to the host over ssh
     my $ssh;
+    my $retry = time + $retry_wait;
 
-    print "Connecting to $host via SSH ... ";
+    print BLUE, "Connecting to $host via SSH ... ", RESET;
     eval {
         $ssh = libssh2($host);
     };
     if ($@) {
         unless ($opt_tolerant) {
-            print "failed, but --tolerant so skipping it.\n";
-            next;
+            print RED, "failed, will retry later.\n", RESET;
+            $retries{$host} = [ $retry, 0 ];
+            $ssh = undef;
         }
-        print "FAIL.\n";
-        last;
     }
-    print "connected.\n";
+    else {
+      print GREEN, "connected.\n", RESET;
+    }
 
     my $hn = $host;
        $hn =~ s/\.[a-zA-Z]+.*$//;
     $hostname_pad = length($hn) + 2;
 
     # set up the polling command and add to the poll list
-    push @ssh, [ $host, $ssh, '/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats' ];
+    push @ssh, [ $host, $ssh, '/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats', $retry ];
     push @sorted_host_list, $host;
 }
 
@@ -113,17 +128,20 @@ sub cl_netstat {
     my( $struct, %stats, %times );
 
     foreach my $host ( @ssh ) {
-        $stats{$host->[0]} = [ libssh2_slurp_cmd( $host->[1], $host->[2] ) ];
+        $stats{$host->[0]} = libssh2_slurp_cmd($host);
         $times{$host->[0]} = time();
     }
 
     foreach my $hostname ( keys %stats ) {
-        my @legend;
+        # host is down
+        if (not defined $stats{$hostname}) {
+            $struct->{$hostname} = undef;
+            next;
+        }
 
+        my @legend;
         $struct->{$hostname}{dsk_rdi} = 0;
-        $struct->{$hostname}{dsk_rds} = 0;
         $struct->{$hostname}{dsk_wdi} = 0;
-        $struct->{$hostname}{dsk_wds} = 0;
 
         foreach my $line ( @{$stats{$hostname}} ) {
             chomp $line;
@@ -187,6 +205,8 @@ sub diff_cl_netstat {
     my %out;
 
     foreach my $host ( keys %$s1 ) {
+        next if not defined $s1->{$host};
+
         my @host_traffic;
         foreach my $iface ( sort keys %{$s1->{$host}} ) {
             if ( $iface =~ /eth\d+/ ) {
@@ -218,6 +238,7 @@ sub diff_cl_netstat {
 my( $iterations, $total_send, $total_recv, $total_disk_read, $total_disk_write, %averages ) = ( 0, 0, 0, 0, 0, () );
 
 my $previous = cl_netstat();
+print GREEN, "Acquired first round. Output begins in $opt_interval seconds.\n", WHITE;
 sleep $opt_interval;
 while ( 1 ) {
     my $current = cl_netstat();
@@ -231,7 +252,7 @@ while ( 1 ) {
     #qw( hostname eth0_total eth1_total eth0_recv eth0_send eth1_recv eth1_send 1min 5min 15min );
     #          www.tobert.org:    8487285    9772156 =>    8043608 /     443677     9265996 /     506160
     #print "------------------------------------------------------------------------------------------------------------------\n";
-    print $header, $/, '-' x length($header), $/;
+    print BLUE, $header, $/, '-' x length($header), $/, RESET;
 
     my $host_count = 0;
     my $host_r_total = 0;
@@ -243,23 +264,31 @@ while ( 1 ) {
         my $hostname = $host;
         $hostname =~ s/\.[a-zA-Z]+.*$//;
 
+        # host down, special case
+        if (not defined $diff{$host}) {
+            printf "%s% ${hostname_pad}s: disconnected, retry attempt %d in %d seconds ...%s\n",
+                DKGRAY, $hostname, $retries{$host}->[1], int($retries{$host}->[0] - time), RESET;
+            next;
+        }
+
         # eth0
-        printf "% ${hostname_pad}s: % 13s % 13s % 13s",
-            $hostname,
-            c($diff{$host}->[0] + $diff{$host}->[1]),
-            c($diff{$host}->[0]),
-            c($diff{$host}->[1]);
+        printf "%s% ${hostname_pad}s: %s% 13s %s% 13s %s% 13s%s",
+            WHITE, $hostname,
+            net_c($diff{$host}->[0] + $diff{$host}->[1], 2),
+            net_c($diff{$host}->[0]),
+            net_c($diff{$host}->[1]),
+            RESET;
 
         # disk iops
-        printf "%12s/s %12s/s     ",
-            c($diff{$host}->[4]),
-            c($diff{$host}->[5]);
+        printf "%s%12s/s %s%12s/s     ",
+            io_c($diff{$host}->[4]),
+            io_c($diff{$host}->[5]);
 
         # load average
-        printf "%5s %5s %5s\n",
-            $current->{$host}{la_short},
-            $current->{$host}{la_medium},
-            $current->{$host}{la_long};
+        printf "%s%5s %s%5s %s%5s\n",
+            la_c($current->{$host}{la_short}),
+            la_c($current->{$host}{la_medium}),
+            la_c($current->{$host}{la_long});
 
         $host_count++;
         $host_r_total += $diff{$host}->[0] + $diff{$host}->[2];
@@ -269,35 +298,104 @@ while ( 1 ) {
         $host_dw_total += $diff{$host}->[5];
     }
 
-    printf "Total:   % 13s         Recv: % 12s     Send: % 12s    (%s mbit/s) | %8s read/s %8s write/s\n",
-        c($host_r_total + $host_s_total),
-        c($host_r_total),
-        c($host_s_total),
-        c((($host_r_total + $host_s_total)*8)/(2**20)),
-        c($host_dr_total),
-        c($host_dw_total);
+    printf "%sTotal:   %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s mbit/s) | %s%8s %sread/s %s%8s %swrite/s%s\n",
+        RESET, net_c($host_r_total + $host_s_total, 2 * $host_count),
+        WHITE, net_c($host_r_total, $host_count),
+        WHITE, net_c($host_s_total, $host_count),
+        WHITE, c((($host_r_total + $host_s_total)*8)/(2**20)),
+        WHITE, io_c($host_dr_total, $host_count),
+        WHITE, io_c($host_dw_total, $host_count),
+        RESET;
   
     $total_send += $host_s_total;
     $total_recv += $host_r_total;
     $total_disk_read  += $host_dr_total;
     $total_disk_write += $host_dw_total;
 
-    printf "Average: % 13s         Recv: % 12s     Send: % 12s    (%s mbit/s) | %8s read/s %8s write/s\n",
-        c(($total_recv + $total_send) / $iterations),
-        c(($total_recv / $iterations) / $host_count),
-        c(($total_send / $iterations) / $host_count),
-        c(((($total_recv + $total_send) / $iterations)*8)/(2**20)),
-        c(($total_disk_read  / $iterations) / $host_count),
-        c(($total_disk_write / $iterations) / $host_count);
-
-    print "\n";
+    printf "%sAverage: %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s mbit/s) | %s%8s %sread/s %s%8s %swrite/s%s\n\n",
+        RESET, net_c(($total_recv + $total_send) / $iterations, 2),
+        WHITE, net_c(($total_recv / $iterations) / $host_count),
+        WHITE, net_c(($total_send / $iterations) / $host_count),
+        WHITE, c(((($total_recv + $total_send) / $iterations)*8)/(2**20)),
+        WHITE, io_c(($total_disk_read  / $iterations) / $host_count),
+        WHITE, io_c(($total_disk_write / $iterations) / $host_count),
+        RESET;
 
     sleep $opt_interval;
 }
 
+sub la_c {
+    my($value, $factor) = @_;
+    $factor ||= 1;
+
+    if ( $value < 0.80 ) {
+        return(GREEN, $value);
+    }
+    if ( $value < 1.20 ) {
+        return(CYAN, $value);
+    }
+    if ( $value < 3.0 ) {
+        return(YELLOW, $value);
+    }
+    elsif ( $value > 5.0 ) {
+        return(MAGENTA, $value);
+    }
+    elsif ( $value > 10.0 ) {
+        return(RED, $value);
+    }
+    return(CYAN, $value);
+}
+
+sub net_c {
+    my($value, $factor) = @_;
+    $factor ||= 1;
+    my $val = $value / $factor;
+    my $color = WHITE;
+
+    if ($val < 1_000_000) {
+        $color = GREEN;
+    }
+    elsif ($val < 5_000_000) {
+        $color = CYAN;
+    }
+    elsif ($val < 20_000_000) {
+        $color = YELLOW;
+    }
+    elsif ($val < 50_000_000) {
+        $color = DKRED;
+    }
+    else {
+        $color = RED;
+    }
+
+    return($color, c(shift));
+}
+
+sub io_c {
+    my($value, $factor) = @_;
+    $factor ||= 1;
+    my $val = $value / $factor;
+    my $color = WHITE;
+
+    if ($val < 3000) {
+        $color = GREEN;
+    }
+    elsif ($val < 10_000) {
+        $color = CYAN;
+    }
+    elsif ($val < 20_000) {
+        $color = YELLOW;
+    }
+    else {
+        $color = RED;
+    }
+
+    return($color, c(shift));
+}
+
 # add commas
 sub c {
-    my $val = int(shift);  
+    my $val = int(shift);
     $val =~ s/(?<=\d)(\d{3})$/,$1/;
     $val =~ s/(?<=\d)(\d{3}),/,$1,/g;
     return $val;
@@ -328,7 +426,7 @@ sub libssh2 {
     my $ok;
 
     for (my $i=0; $i<@keys; $i++) {
-        $ssh2->connect( $hostname );
+        $ssh2->connect( $hostname, 22, Timeout => 3 );
 
         $ok = $ssh2->auth_publickey( @{$keys[$i]} );
         last if ($ok);
@@ -342,22 +440,57 @@ sub libssh2 {
 }
 
 sub libssh2_slurp_cmd {
-    my( $ssh2, $cmd ) = @_;
+    my($info) = @_;
+    my( $host, $ssh2, $cmd ) = @$info;
 
-    confess "Bad args." unless ( $ssh2 && $cmd );
-
-    my $chan = $ssh2->channel();
-    $chan->exec( $cmd );
-
-    my $data = '';
-    while ( !$chan->eof() ) {
-        $chan->read( my $buffer, 4096 );
-        $data .= $buffer;
+    # on connection failures, wait a minute and try again until it works
+    if (not defined $ssh2) {
+        if ($info->[3] < time) {
+            printf "%sretrying connection to %s ...", BLUE, $host;
+            eval {
+                $ssh2 = libssh2( $host );
+            };
+            if ($@) {
+                print RED, "FAILED. Trying again in $retry_wait seconds.\n";
+                $info->[1] = undef;
+                $info->[3] = time + $retry_wait;   # set next retry time
+                $retries{$host}->[0] = $info->[3]; # mark in a global for printing
+                $retries{$host}->[1]++;            # count retries for printing
+                return undef;
+            }
+            else {
+                $info->[1] = $ssh2;
+                $retries{$host}->[1] = 0;
+                print GREEN, "SUCCESS!\n";
+            }
+        }
+        else {
+            return;
+        }
     }
 
-    $chan->close();
+    my $data = '';
+    eval {
+        my $chan = $ssh2->channel();
+        $chan->exec( $cmd );
 
-    return wantarray ? split(/[\r\n]+/, $data) : $data;
+        while ( !$chan->eof() ) {
+            $chan->read( my $buffer, 4096 );
+            $data .= $buffer;
+        }
+
+        $chan->close();
+    };
+    if ( $@ ) {
+        $info->[1] = undef;
+        $info->[3] = time + $retry_wait;
+        $retries{$host}->[0] = $info->[3];
+        $retries{$host}->[1] = 0;
+        return undef;
+    }
+    else {
+        return [split(/[\r\n]+/, $data)];
+    }
 }
 
 # vim: et ts=4 sw=4 ai smarttab
