@@ -84,6 +84,7 @@ my( $fh, $cmdfile ) = my_tempfile();
 if ( $command ) {
     print $fh "#!/bin/bash\n";
     print $fh "cd /var/tmp\n";
+    print $fh "export DEBIAN_FRONTEND=noninteractive\n";
     if ( $remote_output ) {
         print $fh "outfile=$remote_output\n";
     }
