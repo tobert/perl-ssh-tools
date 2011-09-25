@@ -62,7 +62,6 @@ our @ssh;
 our @interfaces;
 our @sorted_host_list;
 our %host_bundles;
-our $hostname_pad = 12;
 our( $opt_device, $opt_tolerant, $opt_interval );
 
 GetOptions(
@@ -94,7 +93,9 @@ foreach my $host ( reverse hostlist() ) {
 
     my $hn = $host;
        $hn =~ s/\.[a-zA-Z]+.*$//;
-    $hostname_pad = length($hn) + 2;
+    if (length($hn) + 2 > $hostname_pad) {
+        $hostname_pad = length($hn) + 2;
+    }
 
     # set up the polling command and add to the poll list
     push @ssh, [ $host, $bundle, '/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats' ];
@@ -232,10 +233,7 @@ while ( 1 ) {
     $previous = $current;
 
     my $header = sprintf "% ${hostname_pad}s: % 13s % 13s % 13s  %12s   %12s     %5s %5s %5s",
-    qw( hostname eth0_total eth0_recv eth0_send read_iops write_iops 1min 5min 15min );
-    #qw( hostname eth0_total eth1_total eth0_recv eth0_send eth1_recv eth1_send 1min 5min 15min );
-    #          www.tobert.org:    8487285    9772156 =>    8043608 /     443677     9265996 /     506160
-    #print "------------------------------------------------------------------------------------------------------------------\n";
+        qw( hostname eth0_total eth0_recv eth0_send read_iops write_iops 1min 5min 15min );
     print BLUE, $header, $/, '-' x length($header), $/, RESET;
 
     my $host_count = 0;

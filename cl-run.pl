@@ -1,5 +1,4 @@
 #!/usr/bin/perl
-$|++;
 
 ###########################################################################
 #                                                                         #
@@ -21,7 +20,7 @@ This script parallelizes ssh access to hosts.
         -s: script/program to copy out then run
         -c: command to run on each host
                 - this will be written to a mini shell script then pushed out
-        -l: place to write program output locally
+        -l: file to write output into on the local host
         -r: place to write program output on the remote hosts
                 - this only creates a shell variable in the command scripts that can
                   be redirected to using \$output
@@ -40,7 +39,6 @@ use warnings;
 use Pod::Usage;
 use Getopt::Long;
 use File::Copy qw( copy );
-use Fcntl ':flock';
 use IO::Handle;
 
 use FindBin qw($Bin);
@@ -49,28 +47,26 @@ use DshPerlHostLoop;
 
 select(STDERR);
 
-our $errfile          = "&1";
-our $slaves           = undef;
-our $tag_local_output = undef;
-our $local_output     = undef;
-our $remote_output    = undef;
-our $background       = undef;
-our $command          = undef;
-our $script           = undef;
-our $help             = undef;
+our $errfile           = "&1";
+our $slaves            = undef;
+our $tag_local_output  = undef;
+our $local_output_file = undef;
+our $remote_output     = undef;
+our $background        = undef;
+our $command           = undef;
+our $script            = undef;
+our $help              = undef;
 
 GetOptions(
     "s=s" => \$script,
     "c=s" => \$command,
-    "l=s" => \$local_output,
+    "l=s" => \$local_output_file,
     "r=s" => \$remote_output,
     "e=s" => \$errfile,
     "b"   => \$background,
     "n:i" => \$slaves,
     "h"   => \$help
 );
-
-$tag_local_output = tag_output();
 
 if ( $help || (!$command && !$script) ) {
     pod2usage();
@@ -82,9 +78,9 @@ if ( $script && $command ) {
 
 my( $fh, $cmdfile ) = my_tempfile();
 if ( $command ) {
-    print $fh "#!/bin/bash\n";
-    print $fh "cd /var/tmp\n";
+    print $fh "#!/bin/bash\n\n";
     print $fh "export DEBIAN_FRONTEND=noninteractive\n";
+    print $fh "cd /tmp\n";
     if ( $remote_output ) {
         print $fh "outfile=$remote_output\n";
     }
@@ -118,30 +114,28 @@ sub runit {
         print STDERR "COMMAND: $scp\n" if ( verbose() );
     }
     system( $scp );
+    if ($? != 0) {
+        print STDERR RED, "Could not copy command script to $host!", RESET, $/;
+    }
 
-    #my @out = `/usr/bin/ssh $ssh_options $host /bin/bash $cmdfile`;
     my @out = ssh( "$remote_user\@$host", "/bin/bash $cmdfile" );
-    my $fh;
-    if ( $local_output ) {
-        open( $fh, ">> $local_output" );
-        flock( $fh, LOCK_EX );
-        seek( $fh, 0, 2 );
-    }
-    else {
-        $fh = IO::Handle->new_from_fd( fileno(STDOUT), 'w' );
-    }
 
-    if ( $tag_local_output ) {
-        for my $line ( @out ) {
+
+    my $fh;
+    if ( $local_output_file ) {
+        lock(); # uses flock under the hood in DshPerlHostLoop
+        open( $fh, ">> $local_output_file" );
+        foreach my $line ( @out ) {
             print $fh "$host: $line\n";
         }
+        close $fh;
+        unlock();
     }
     else {
-        print $fh join("\n",@out), "\n";
+        foreach my $line ( @out ) {
+            printf "%s% ${hostname_pad}s : %s%s\n", BLUE, $host, RESET, $line;
+        }
     }
-
-    flock( $fh, LOCK_UN ) if ( $local_output );
-    close $fh;
 
     exit 0;
 }
@@ -160,3 +154,4 @@ version 2.0 is GPL compatible by itself, hence there is no benefit to having an
 Artistic 2.0 / GPL disjunction.)  See the file LICENSE for details.
 
 =cut
+

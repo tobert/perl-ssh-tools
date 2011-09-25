@@ -16,6 +16,8 @@ use IPC::Open3;
 use IO::Select;
 use IO::Handle;
 use Sys::Hostname ();
+use Fcntl ':flock';
+use File::Temp qw(tempfile);
 eval { use Net::SSH2; }; # optional
 use base 'Exporter';
 
@@ -35,6 +37,8 @@ our @tempfiles;
 our $remote_user ||= $ENV{USER};
 our $sshkey ||= "$ENV{HOME}/.ssh/id_rsa";
 our $retry_wait = 30;
+our $lock_fh = tempfile();
+our $hostname_pad = 8;
 
 # Most shops have a noisy /etc/issue.net. This reads the local issue.net
 # and removes any lines matching it from the output from ssh.
@@ -56,8 +60,9 @@ use constant RESET   => "\x1b[0m";
 our @EXPORT = qw(
   func_loop ssh scp hostlist reap verbose my_tempfile tag_output 
   libssh2_connect libssh2_reconnect libssh2_slurp_cmd
-  $ssh_options $remote_user $retry_wait
+  $ssh_options $remote_user $retry_wait $hostname_pad
   @opt_filter_excl @opt_filter_incl
+  lock unlock
   BLACK RED GREEN YELLOW BLUE MAGENTA CYAN WHITE DKGRAY DKRED RESET
 );
 
@@ -227,7 +232,8 @@ sub scmd {
                 # don't look for issue.net matches after its byte size has past
                 unless ( !$line or ($bytes < $issue_len and grep { $_ eq $line } @issue) ) {
                     $bytes += length($line) if ( $line );
-                    push @output, $line;
+                    # TODO: probably should detect a terminal or have an option to disable color
+                    push @output, RED . $line . RESET;
                 }
                 $eofs{$rfd} = 1 if ( eof($err) );
             }
@@ -238,13 +244,15 @@ sub scmd {
         }
     }
 
+    # this usually means success
     if ( $bytes == 0 ) {
-        print STDERR "Got zero bytes from command: $scmd @_\n";
+        push @output, "''";
+        printf STDERR "%sGot zero bytes from command: $scmd @_%s\n", CYAN, RESET if ($verbose);
     }
 
     waitpid( $pid, 0 );
     if ( $? != 0 ) {
-        print STDERR "Got non-zero exit status from command: $scmd @_\n";
+        printf STDERR "%sGot non-zero exit status from command: $scmd @_%s\n", RED, RESET;
     }
 
     return @output;
@@ -290,8 +298,8 @@ sub libssh2_connect {
         $ok = $ssh2->auth_publickey( @{$keys[$i]} );
         last if ($ok);
 
-        printf STDERR "Failed authentication as user %s with pubkey %s, trying %s:%s\n",
-            $keys[0]->[0], $keys[0]->[1], $keys[1]->[0], $keys[1]->[1];
+        printf STDERR "%sFailed authentication as user %s with pubkey %s, trying %s:%s%s\n",
+            RED, $keys[0]->[0], $keys[0]->[1], $keys[1]->[0], $keys[1]->[1], RESET;
     }
     $ok or die "Could not authenticate.";
 
@@ -402,20 +410,26 @@ sub hostlist {
         chomp $hostname;
         $hostname =~ s/\s//g;
         $hostname =~ s/#.*$//g;
+
         next unless ( length $hostname );
         next if ( $hostname =~ /^#/ );
 
         FILTER_EX: foreach my $excl ( @opt_filter_excl ) {
             if ( $hostname =~ /$excl/ ) {
-                print "DshPerlHostLoop: Skipping $hostname because it matched filter $excl.\n" if ( $debug );
+                printf "%sDshPerlHostLoop: Skipping $hostname because it matched filter $excl.%s\n", BLUE, RESET if ( $debug );
                 next HOST;
             }
         }
         FILTER_IN: foreach my $incl ( @opt_filter_incl ) {
             if ( $hostname !~ /$incl/i ) {
-                print "DshPerlHostLoop: Skipping $hostname because it didn't match filter $incl.\n" if ( $debug );
+                print "%sDshPerlHostLoop: Skipping $hostname because it didn't match filter $incl.%s\n", BLUE, RESET if ( $debug );
                 next HOST;
             }
+        }
+
+        # update the global hostname padding variable used for pretty printing
+        if (length($hostname) + 2 > $hostname_pad) {
+            $hostname_pad = length($hostname) + 2;
         }
 
         push @hostlist, $hostname;
@@ -444,14 +458,11 @@ sub reap {
 
 =item tag_output()
 
-Toggle/get whether or not output should be prefixed with the hostname.
+Get whether or not output should be prefixed with the hostname.
 
 =cut
 
 sub tag_output {
-    if ( @_ == 1 ) {
-        $tag_output = shift;
-    }
     return $tag_output;
 }
 
@@ -531,6 +542,26 @@ BEGIN {
     }
 }
 
+=item lock()
+
+Simple lock backed on flock. For printing mostly, flock doesn't work on STDOUT.
+
+=cut
+
+sub lock {
+    flock( $lock_fh, LOCK_EX );
+}
+
+=item unlock()
+
+Opposite of above.
+
+=cut
+
+sub unlock {
+  flock( $lock_fh, LOCK_UN );
+}
+
 =item my_tempfile()
 
 Not secure. Generates a parseable-by-humans tempfile so people can
@@ -573,6 +604,8 @@ END {
             }
         }
     }
+
+    eval { unlock(); }; # try to unlock
 }
 
 # track Net::SSH2 connections & related information in
