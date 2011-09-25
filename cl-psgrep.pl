@@ -16,12 +16,9 @@ cl-psgrep.pl - ps/grep across the cluster
 This utility, rather than doing the work on its own, simply calls run.pl.  Not all of the options are passed through
 and some (like -t) are implied.    Most of the time, the very simplest usage is best.
 
- cl-psgrep.pl snmpd    # grep on the domU's
- cl-psgrep.pl -a snmpd # grep on everything
+ cl-psgrep.pl snmpd
 
  cl-psgrep.pl [-d] [-a] [-b] [-n] [-x]
-    -a: run commands on all hosts (frontends and storage)
-    -n: number of domUs to run on
     -h: print this message
 
 =cut
