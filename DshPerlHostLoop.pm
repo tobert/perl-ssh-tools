@@ -16,31 +16,50 @@ use IPC::Open3;
 use IO::Select;
 use IO::Handle;
 use Sys::Hostname ();
+eval { use Net::SSH2; }; # optional
 use base 'Exporter';
 
 BEGIN {
-    use vars qw( @opt_filter_excl @opt_filter_incl $host_group $remote_user );
+    use vars qw( @opt_filter_excl @opt_filter_incl $remote_user );
 }
 
 our $ssh_options = "-o 'BatchMode yes' -o 'StrictHostKeyChecking no' -o 'ConnectTimeout 10'";
 our $tag_output = 1;
-our %ssh2_connections;
 our $debug = undef;
 our $verbose;
-our $tempdir = '/var/tmp';
+our $tempdir = '/tmp';
 our $mainpid = $$;
 # can be overridden with --list $name
 our $machines_list ||= "$ENV{HOME}/.dsh/machines.list";
 our @tempfiles;
 our $remote_user ||= $ENV{USER};
 our $sshkey ||= "$ENV{HOME}/.ssh/id_rsa";
+our $retry_wait = 30;
 
 # Most shops have a noisy /etc/issue.net. This reads the local issue.net
 # and removes any lines matching it from the output from ssh.
 my @issue = read_issue();
 my $issue_len = length(join("\n", @issue));
 
-our @EXPORT = qw(func_loop ssh scp hostlist reap $ssh_options tag_output @opt_filter_excl @opt_filter_incl $host_group verbose my_tempfile $remote_user);
+use constant BLACK   => "\x1b[30m";
+use constant RED     => "\x1b[31m";
+use constant GREEN   => "\x1b[32m";
+use constant YELLOW  => "\x1b[33m";
+use constant BLUE    => "\x1b[34m";
+use constant MAGENTA => "\x1b[35m";
+use constant CYAN    => "\x1b[36m";
+use constant WHITE   => "\x1b[37m";
+use constant DKGRAY  => "\x1b[1;30m";
+use constant DKRED   => "\x1b[1;31m";
+use constant RESET   => "\x1b[0m";
+
+our @EXPORT = qw(
+  func_loop ssh scp hostlist reap verbose my_tempfile tag_output 
+  libssh2_connect libssh2_reconnect libssh2_slurp_cmd
+  $ssh_options $remote_user $retry_wait
+  @opt_filter_excl @opt_filter_incl
+  BLACK RED GREEN YELLOW BLUE MAGENTA CYAN WHITE DKGRAY DKRED RESET
+);
 
 =head1 NAME
 
@@ -231,6 +250,142 @@ sub scmd {
     return @output;
 }
 
+=item libssh2_connect()
+
+Connect to the remote host over SSH using Net::SSH2 instead
+of shelling out. This is a bit more efficient over the long run,
+but does not work with ssh agent, and therefore doesn't work
+with encrypted ssh keys.
+
+=cut
+
+# sets up the ssh2 connection
+sub libssh2_connect {
+    my( $hostname, $port, $bundle ) = @_;
+    $port ||= 22;
+
+    # TODO: make this configurable
+    my @keys = (
+        # my monitor-rsa key is unencrypted to work with Net::SSH2
+        # it is restricted to '/bin/cat /proc/net/dev etc.' though so very low risk
+        [
+            $remote_user,
+            $ENV{HOME}.'/.ssh/monitor-rsa.pub',
+            $ENV{HOME}.'/.ssh/monitor-rsa'
+        ],
+        # the normal setup - ssh-agent isn't supported yet
+        [
+            $remote_user,
+            $ENV{HOME}.'/.ssh/id_rsa.pub',
+            $ENV{HOME}.'/.ssh/id_rsa'
+        ]
+    );
+
+    my $ssh2 = Net::SSH2->new();
+    my $ok;
+
+    for (my $i=0; $i<@keys; $i++) {
+        $ssh2->connect( $hostname, $port, Timeout => 3 );
+
+        $ok = $ssh2->auth_publickey( @{$keys[$i]} );
+        last if ($ok);
+
+        printf STDERR "Failed authentication as user %s with pubkey %s, trying %s:%s\n",
+            $keys[0]->[0], $keys[0]->[1], $keys[1]->[0], $keys[1]->[1];
+    }
+    $ok or die "Could not authenticate.";
+
+    if ($ssh2) {
+        if ($bundle) {
+            $bundle->host($hostname);
+            $bundle->port($port);
+            $bundle->ssh2($ssh2);
+        }
+        else {
+            $bundle = bless {
+                host => $hostname,
+                port => $port,
+                ssh2 => $ssh2
+            }, 'DshPerlHostLoop::Bundle';
+        }
+    }
+    else {
+        $bundle->ssh2(undef);
+        $bundle->last_attempt(time);
+    }
+
+    return $bundle;
+}
+
+sub libssh2_reconnect {
+    my $bundle = shift;
+
+    # on connection failures, wait a minute and try again until it works
+    if (not defined $bundle->ssh2) {
+        if ($bundle->next_attempt < time) {
+            printf "%sretrying connection to %s ...", BLUE, $bundle->host;
+            eval {
+                libssh2_connect( $bundle->host, $bundle->port, $bundle );
+            };
+            if ($@) {
+                print RED, "FAILED. Trying again in $retry_wait seconds.\n";
+
+                $bundle->ssh2(undef);
+                $bundle->next_attempt(time + $retry_wait);
+                $bundle->retries($bundle->retries + 1);
+
+                return undef;
+            }
+            else {
+                $bundle->retries(0);
+                print GREEN, "SUCCESS!\n";
+            }
+        }
+        else {
+            return;
+        }
+    }
+
+    return $bundle;
+}
+
+=item libssh2_slurp_cmd()
+
+Run a command over an existing libssh2 connection and capture all
+of its output.
+
+ my $input = libssh2_slurp_cmd( $ssh2, $command );
+
+=cut
+
+sub libssh2_slurp_cmd {
+    my( $bundle, $cmd ) = @_;
+
+    libssh2_reconnect( $bundle ) unless ( ref $bundle && $bundle->ssh2 );
+
+    my $data = '';
+    eval {
+        my $chan = $bundle->ssh2->channel();
+        $chan->exec( $cmd );
+
+        while ( !$chan->eof() ) {
+            $chan->read( my $buffer, 4096 );
+            $data .= $buffer;
+        }
+
+        $chan->close();
+    };
+    if ( $@ ) {
+        $bundle->ssh2(undef);
+        $bundle->next_attempt(time + $retry_wait);
+        $bundle->retries(0);
+        return undef;
+    }
+    else {
+        return [split(/[\r\n]+/, $data)];
+    }
+}
+
 =item hostlist()
 
 Returns an array of hosts to be accessed.  This reads the hostname list (-m $file or default ~/.dsh/machines.list)
@@ -355,10 +510,6 @@ BEGIN {
             push @to_kill, $i;
             $tag_output = undef;
         }
-        if ( $main::ARGV[$i] eq '-g' ) {
-            push @to_kill, $i, $i+1;
-            $host_group = $main::ARGV[$i+1];
-        }
         if ( $main::ARGV[$i] eq '-i' ) {
             push @to_kill, $i, $i+1;
             my $sshkey = $main::ARGV[$i+1];
@@ -422,6 +573,27 @@ END {
             }
         }
     }
+}
+
+# track Net::SSH2 connections & related information in
+# a separate object rather than having a bunch of globals
+# stuff above will just bless right into this
+# this AUTOLOAD just adds method syntax to a hash without dependencies
+package DshPerlHostLoop::Bundle;
+
+sub new {
+  my($type, $self) = @_;
+  return bless $self, $type;
+}
+
+sub AUTOLOAD {
+    my($self, $value) = @_;
+    our $AUTOLOAD;
+    ( $_, $_, my $method ) = split /::/, $AUTOLOAD;
+    if ($value) {
+        $self->{$method} = $value;
+    }
+    return $self->{$method};
 }
 
 1;

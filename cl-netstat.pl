@@ -52,33 +52,17 @@ use Pod::Usage;
 use Getopt::Long;
 use Time::HiRes qw(time);
 use Data::Dumper;
-# use a libssh2 (Net::SSH2) instead of shelling out to ssh
-# it's a lot more efficient over the long times this can be
-# left running
 use Net::SSH2;
 
 use FindBin qw($Bin);
 use lib $Bin;
 use DshPerlHostLoop;
 
-use constant BLACK   => "\x1b[30m";
-use constant RED     => "\x1b[31m";
-use constant GREEN   => "\x1b[32m";
-use constant YELLOW  => "\x1b[33m";
-use constant BLUE    => "\x1b[34m";
-use constant MAGENTA => "\x1b[35m";
-use constant CYAN    => "\x1b[36m";
-use constant WHITE   => "\x1b[37m";
-use constant DKGRAY  => "\x1b[1;30m";
-use constant DKRED   => "\x1b[1;31m";
-use constant RESET   => "\x1b[0m";
-
-my @ssh;
+our @ssh;
 our @interfaces;
-my @sorted_host_list;
+our @sorted_host_list;
+our %host_bundles;
 our $hostname_pad = 12;
-our %retries;
-our $retry_wait = 30;
 our( $opt_device, $opt_tolerant, $opt_interval );
 
 GetOptions(
@@ -91,19 +75,18 @@ $opt_interval ||= 2;
 
 foreach my $host ( reverse hostlist() ) {
     # connect to the host over ssh
-    my $ssh;
-    my $retry = time + $retry_wait;
+    my $bundle = DshPerlHostLoop::Bundle->new({ host => $host, port => 22 }) ; # ssh connection + metadata
 
     print BLUE, "Connecting to $host via SSH ... ", RESET;
     eval {
-        $ssh = libssh2($host);
+        $bundle = libssh2_connect($host, 22);
     };
     if ($@) {
-        unless ($opt_tolerant) {
-            print RED, "failed, will retry later.\n", RESET;
-            $retries{$host} = [ $retry, 0 ];
-            $ssh = undef;
-        }
+      print RED, "failed, will retry later.\n", RESET;
+      print RED, "$@\n", RESET;
+      $bundle->next_attempt(time + $retry_wait);
+      $bundle->retries(0);
+      $bundle->ssh2(undef);
     }
     else {
       print GREEN, "connected.\n", RESET;
@@ -114,8 +97,9 @@ foreach my $host ( reverse hostlist() ) {
     $hostname_pad = length($hn) + 2;
 
     # set up the polling command and add to the poll list
-    push @ssh, [ $host, $ssh, '/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats', $retry ];
+    push @ssh, [ $host, $bundle, '/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats' ];
     push @sorted_host_list, $host;
+    $host_bundles{$host} = $bundle;
 }
 
 #tobert@mybox:~/src/dsh-perl$ cat /proc/net/dev
@@ -128,7 +112,7 @@ sub cl_netstat {
     my( $struct, %stats, %times );
 
     foreach my $host ( @ssh ) {
-        $stats{$host->[0]} = libssh2_slurp_cmd($host);
+        $stats{$host->[0]} = libssh2_slurp_cmd($host->[1], $host->[2]);
         $times{$host->[0]} = time();
     }
 
@@ -266,8 +250,9 @@ while ( 1 ) {
 
         # host down, special case
         if (not defined $diff{$host}) {
+            my $bundle = $host_bundles{$host};
             printf "%s% ${hostname_pad}s: disconnected, retry attempt %d in %d seconds ...%s\n",
-                DKGRAY, $hostname, $retries{$host}->[1], int($retries{$host}->[0] - time), RESET;
+                DKGRAY, $hostname, $bundle->retries || 1, int($bundle->next_attempt - time), RESET;
             next;
         }
 
@@ -401,99 +386,6 @@ sub c {
     return $val;
 }
 
-# sets up the ssh2 connection
-sub libssh2 {
-    my( $hostname ) = @_;
-
-    # TODO: make this configurable
-    my @keys = (
-        # my monitor-rsa key is unencrypted to work with Net::SSH2
-        # it is restricted to '/bin/cat /proc/net/dev etc.' though so very low risk
-        [
-            $remote_user,
-            $ENV{HOME}.'/.ssh/monitor-rsa.pub',
-            $ENV{HOME}.'/.ssh/monitor-rsa'
-        ],
-        # the normal setup - ssh-agent isn't supported yet
-        [
-            $remote_user,
-            $ENV{HOME}.'/.ssh/id_rsa.pub',
-            $ENV{HOME}.'/.ssh/id_rsa'
-        ]
-    );
-
-    my $ssh2 = Net::SSH2->new();
-    my $ok;
-
-    for (my $i=0; $i<@keys; $i++) {
-        $ssh2->connect( $hostname, 22, Timeout => 3 );
-
-        $ok = $ssh2->auth_publickey( @{$keys[$i]} );
-        last if ($ok);
-
-        printf STDERR "Failed authentication as user %s with pubkey %s, trying %s:%s\n",
-            $keys[0]->[0], $keys[0]->[1], $keys[1]->[0], $keys[1]->[1];
-    }
-    $ok or die "Could not authenticate.";
-  
-    return $ssh2;
-}
-
-sub libssh2_slurp_cmd {
-    my($info) = @_;
-    my( $host, $ssh2, $cmd ) = @$info;
-
-    # on connection failures, wait a minute and try again until it works
-    if (not defined $ssh2) {
-        if ($info->[3] < time) {
-            printf "%sretrying connection to %s ...", BLUE, $host;
-            eval {
-                $ssh2 = libssh2( $host );
-            };
-            if ($@) {
-                print RED, "FAILED. Trying again in $retry_wait seconds.\n";
-                $info->[1] = undef;
-                $info->[3] = time + $retry_wait;   # set next retry time
-                $retries{$host}->[0] = $info->[3]; # mark in a global for printing
-                $retries{$host}->[1]++;            # count retries for printing
-                return undef;
-            }
-            else {
-                $info->[1] = $ssh2;
-                $retries{$host}->[1] = 0;
-                print GREEN, "SUCCESS!\n";
-            }
-        }
-        else {
-            return;
-        }
-    }
-
-    my $data = '';
-    eval {
-        my $chan = $ssh2->channel();
-        $chan->exec( $cmd );
-
-        while ( !$chan->eof() ) {
-            $chan->read( my $buffer, 4096 );
-            $data .= $buffer;
-        }
-
-        $chan->close();
-    };
-    if ( $@ ) {
-        $info->[1] = undef;
-        $info->[3] = time + $retry_wait;
-        $retries{$host}->[0] = $info->[3];
-        $retries{$host}->[1] = 0;
-        return undef;
-    }
-    else {
-        return [split(/[\r\n]+/, $data)];
-    }
-}
-
-# vim: et ts=4 sw=4 ai smarttab
 
 __END__
 
