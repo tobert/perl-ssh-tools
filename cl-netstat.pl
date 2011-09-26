@@ -384,6 +384,7 @@ sub c {
     return $val;
 }
 
+# vim: et ts=4 sw=4 ai smarttab
 
 __END__
 

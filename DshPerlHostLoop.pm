@@ -21,18 +21,16 @@ use File::Temp qw(tempfile);
 eval { use Net::SSH2; }; # optional
 use base 'Exporter';
 
-BEGIN {
-    use vars qw( @opt_filter_excl @opt_filter_incl $remote_user );
-}
-
+# globals!
+our @opt_filter_excl;
+our @opt_filter_incl;
 our $ssh_options = "-o 'BatchMode yes' -o 'StrictHostKeyChecking no' -o 'ConnectTimeout 10'";
 our $tag_output = 1;
 our $debug = undef;
 our $verbose;
 our $tempdir = '/tmp';
 our $mainpid = $$;
-# can be overridden with --list $name
-our $machines_list ||= "$ENV{HOME}/.dsh/machines.list";
+our $machines_list ||= "$ENV{HOME}/.dsh/machines.list"; # can be overridden with --list $name
 our @tempfiles;
 our $remote_user ||= $ENV{USER};
 our $sshkey ||= "$ENV{HOME}/.ssh/id_rsa";
@@ -57,6 +55,13 @@ use constant DKGRAY  => "\x1b[1;30m";
 use constant DKRED   => "\x1b[1;31m";
 use constant RESET   => "\x1b[0m";
 
+# please, for the love of FSM, do not copy the style of this module
+# @EXPORT is the kind of thing that makes sense when you quickly turn
+# a utility (in this case, cl-run.pl's predecessor) into a module so
+# you can whip up a bunch of look-alike utilities. The right thing to
+# do from the start is to design a clean module, at least using
+# class methods so their origin is clearly visible in downstream source.
+# It's on my TODO list ;)
 our @EXPORT = qw(
   func_loop ssh scp hostlist reap verbose my_tempfile tag_output 
   libssh2_connect libssh2_reconnect libssh2_slurp_cmd
@@ -284,8 +289,8 @@ sub libssh2_connect {
         # the normal setup - ssh-agent isn't supported yet
         [
             $remote_user,
-            $ENV{HOME}.'/.ssh/id_rsa.pub',
-            $ENV{HOME}.'/.ssh/id_rsa'
+            $sshkey . '.pub', # this should usually be correct
+            $sshkey           # settable on the CLI with -i
         ]
     );
 
@@ -540,6 +545,22 @@ BEGIN {
     foreach my $idx ( reverse sort @to_kill ) {
         delete $main::ARGV[$idx];
     }
+}
+
+=item set_screen_title()
+
+Set the title in GNU screen if it's detected.
+
+ set_screen_title("Cluster Netstat, Cluster: foobar");
+
+=cut
+
+sub set_screen_title {
+  my $title = shift;
+
+  if ($ENV{TERM} eq 'screen' or ($ENV{TERMCAP} and $ENV{TERMCAP} =~ /screen/)) {
+    print "\033k$title\033\\";
+  }
 }
 
 =item lock()
