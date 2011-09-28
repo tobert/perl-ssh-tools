@@ -512,7 +512,7 @@ BEGIN {
             }
         }
 
-        if ( $main::ARGV[$i] eq '--incl' || $main::ARGV[$i] eq '-i' ) {
+        if ( $main::ARGV[$i] eq '--incl' ) {
             push @to_kill, $i, $i+1;
             my $f = $main::ARGV[$i+1];
             push @opt_filter_incl, qr/$f/;
