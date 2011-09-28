@@ -176,6 +176,7 @@ sub cl_netstat {
                 if (not $opt_device or $opt_device eq $1) {
                     $struct->{$hostname}{dsk_rdi} += $2;
                     $struct->{$hostname}{dsk_wdi} += $3;
+                    #$struct->{$hostname}{dsk_wms} += $4;
                 }
             }
         }
@@ -192,12 +193,13 @@ sub diff_cl_netstat {
     foreach my $host ( keys %$s1 ) {
         next if not defined $s1->{$host};
 
+        my $seconds = $s1->{$host}{last_update} - $s2->{$host}{last_update}; 
+
         my @host_traffic;
         foreach my $iface ( sort keys %{$s1->{$host}} ) {
             if ( $iface =~ /eth\d+/ ) {
                 my $rdiff = $s1->{$host}{$iface}{rbytes} - $s2->{$host}{$iface}{rbytes};
                 my $tdiff = $s1->{$host}{$iface}{tbytes} - $s2->{$host}{$iface}{tbytes};
-                my $seconds = $s1->{$host}{last_update} - $s2->{$host}{last_update}; 
                 push @host_traffic, int($rdiff / $seconds), int($tdiff / $seconds);
             }
             #elsif ($iface =~ /^dsk_[rw]d[is]/) {
@@ -210,8 +212,8 @@ sub diff_cl_netstat {
             push @host_traffic, 0, 0;
         }
 
-        $host_traffic[4] = $s1->{$host}{dsk_rdi} - $s2->{$host}{dsk_rdi},
-        $host_traffic[5] = $s1->{$host}{dsk_wdi} - $s2->{$host}{dsk_wdi};
+        $host_traffic[4] = ($s1->{$host}{dsk_rdi} - $s2->{$host}{dsk_rdi}) / $seconds;
+        $host_traffic[5] = ($s1->{$host}{dsk_wdi} - $s2->{$host}{dsk_wdi}) / $seconds;;
 
         $out{$host} = \@host_traffic;
     }
@@ -281,13 +283,14 @@ while ( 1 ) {
         $host_dw_total += $diff{$host}->[5];
     }
 
-    printf "%sTotal:   %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s mbit/s) | %s%8s %sread/s %s%8s %swrite/s%s\n",
-        RESET, net_c($host_r_total + $host_s_total, 2 * $host_count),
-        WHITE, net_c($host_r_total, $host_count),
-        WHITE, net_c($host_s_total, $host_count),
-        WHITE, c((($host_r_total + $host_s_total)*8)/(2**20)),
-        WHITE, io_c($host_dr_total, $host_count),
-        WHITE, io_c($host_dw_total, $host_count),
+    #        W          C    V          W       C    V      W       C    V     W  V            C  V  W       C   V  W        R
+    printf "%sTotal:   %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s mbit/s) | %s% 6s %sread/s %s% 6s %swrite/s%s\n",
+        WHITE, net_c($host_r_total + $host_s_total, 2 * $host_count), WHITE, # wcvw
+        net_c($host_r_total, $host_count), WHITE,                            # cvw
+        net_c($host_s_total, $host_count), WHITE,                            # cvw
+        c((($host_r_total + $host_s_total)*8)/(2**20)),                      # v
+        io_c($host_dr_total, $host_count), WHITE,                            # cvw
+        io_c($host_dw_total, $host_count), WHITE,                            # cvw
         RESET;
   
     $total_send += $host_s_total;
@@ -295,13 +298,14 @@ while ( 1 ) {
     $total_disk_read  += $host_dr_total;
     $total_disk_write += $host_dw_total;
 
-    printf "%sAverage: %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s mbit/s) | %s%8s %sread/s %s%8s %swrite/s%s\n\n",
-        RESET, net_c(($total_recv + $total_send) / $iterations, 2),
-        WHITE, net_c(($total_recv / $iterations) / $host_count),
-        WHITE, net_c(($total_send / $iterations) / $host_count),
-        WHITE, c(((($total_recv + $total_send) / $iterations)*8)/(2**20)),
-        WHITE, io_c(($total_disk_read  / $iterations) / $host_count),
-        WHITE, io_c(($total_disk_write / $iterations) / $host_count),
+    #        W          C    V          W       C    V      W       C    V     W  V            C  V  W       C   V  W        R
+    printf "%sAverage: %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s mbit/s) | %s%6s %sread/s %s%6s %swrite/s%s\n\n",
+        WHITE, net_c(($total_recv + $total_send) / $iterations, 2), WHITE, # wcvw
+        net_c(($total_recv / $iterations) / $host_count), WHITE,           # cvw
+        net_c(($total_send / $iterations) / $host_count), WHITE,           # cvw
+        c(((($total_recv + $total_send) / $iterations)*8)/(2**20)),        # v
+        io_c(($total_disk_read  / $iterations) / $host_count), WHITE,      # cvw
+        io_c(($total_disk_write / $iterations) / $host_count), WHITE,      # cvw
         RESET;
 
     sleep $opt_interval;
