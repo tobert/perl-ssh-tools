@@ -27,9 +27,6 @@ This script parallelizes ssh access to hosts.
         -e: file to write errors to
         -b: background the jobs on the remote host
                 - equivalent to \"nohup command &\"
-        -t: when writing to a local file with -l, prepend the source hostname to every
-                line of output
-        -n: number of hosts to run on
         -h: print this message
 
 =cut
