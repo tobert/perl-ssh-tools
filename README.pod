@@ -1,6 +1,6 @@
 =head1 NAME
 
-perl-ssh-tools - a collection of parallel, forkbombing cluster ssh tools written in perl
+perl-ssh-tools - a collection of cluster ssh tools
 
 =head1 HISTORY
 
@@ -38,6 +38,7 @@ haven't ever had a problem with performance.
  cl-killall.pl    # kill a process on hosts with a regular expression
  cl-psgrep.pl     # look for processes across the cluster
  cl-netstat.pl    # a distributed network I/O display
+ nssh.rb          # ssh wrapper that sets screen title & other things
 
 =head1 EXAMPLES
 
@@ -100,25 +101,53 @@ haven't ever had a problem with performance.
  Total:          12,424         Recv:        1,729     Send:       10,695    (0 mbit/s) |        0 read/s  325,915 write/s
  Average:        12,828         Recv:          151     Send:          917    (0 mbit/s) |        0 read/s  129,660 write/s
 
+nssh.rb does a few nice things around sshing inside GNU screen. In the original version, all it did was set
+the screen title automatically by grabbing the hostname off the args. Now it does quite a bit more, including
+letting you create a bunch of new named sessions in screen without a lot of typing.
+
+It also tries to flip CNAME's to A names automatically while still setting your screen title to the CNAME. This
+can be pretty handy when working with lots of EC2 hosts where you may not necessarily have set up all the CNAME's
+in ~/.ssh/config.
+
+By default, GNU screen has MAXWIN at 40. I almost always run a rebuilt version from the git head with MAXWIN 512.
+
+ $> nssh.rb hostname.tobert.org
+
+ # in screen, ctrl-a c, then
+ $> nssh.rb reset
+ $> nssh.rb next --list nosqldb-dev
+ # ctrl-a c
+ $> nssh.rb next --list nosqldb-dev
+ # ctrl-a c 
+ # etc. ...
+
+And finally, the latest incarnation of my screenrc generation script is included. At the moment, I hard-code a list of
+clusters I want to connect to at screen startup so I can do something like the following after reboots:
+
+ $> ssh-add
+ $> generate-screen-config.rb
+ $> screen -c ~/.screenrc-main -S main -T xterm-color -U
+
+This repo includes .screenrc-main based on what I use all the time.
 
 =head1 INSTALLATION
 
-I usually just copy all these files into ~/bin.
+I usually symlink all these files into ~/bin, which my ~/.profile sets to be in my PATH.
 
- mkdir ~/bin
- cd ~/bin
- git clone https://github.com/tobert/perl-ssh-tools.git
- ln -s perl-ssh-tools/* .
- export PATH=~/bin:$PATH
+ $> mkdir ~/bin ~/src
+ $> cd ~/src
+ $> git clone https://github.com/tobert/perl-ssh-tools.git
+ $> ln -s ~/src/perl-ssh-tools/* ~/bin/
+ $> export PATH=~/bin:$PATH
 
 =head1 NETSTAT SETUP
 
 I keep my primary ssh key encrypted like any good boy should. Since Net::SSH2 doesn't support ssh-agent,
 I use a secondary key in ~/.ssh/monitor-rsa that is restricted to only support cl-netstat.pl. It looks something like the following.
 
- ssh-keygen -t rsa -f ~/.ssh/monitor-rsa -N ''
- echo "no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,command=\"/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats\" $(< ~/.ssh/monitor-rsa.pub)" >> ~/.ssh/authorized_keys
- cl-sendfile.pl --list cassandra-rec -l ~/.ssh/authorized_keys -r /home/$USER/.ssh/authorized_keys
+ $> ssh-keygen -t rsa -f ~/.ssh/monitor-rsa -N ''
+ $> echo "no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,command=\"/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats\" $(< ~/.ssh/monitor-rsa.pub)" >> ~/.ssh/authorized_keys
+ $> cl-sendfile.pl --list cassandra-rec -l ~/.ssh/authorized_keys -r /home/$USER/.ssh/authorized_keys
  # or distribute however you prefer
 
 =head1 SEE ALSO
