@@ -1,6 +1,10 @@
 =head1 NAME
 
-perl-ssh-tools - a collection of cluster ssh tools
+cluster-ssh-tools - a collection of cluster ssh tools
+
+=head1 NOTICE
+
+I'm going to rename this repo soon on github, considering it's not just perl anymore.
 
 =head1 HISTORY
 
