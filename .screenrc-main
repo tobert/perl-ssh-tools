@@ -41,7 +41,7 @@ termcapinfo xterm* be
 # Do not use xterm's alternative window buffer, it breaks scrollback (see bug #61195)
 termcapinfo xterm|xterms|xs ti@:te=\E[2J
 
-msgwait 86400
+msgwait 2
 bind j focus down
 bind k focus up
 
