@@ -53,6 +53,7 @@ use Getopt::Long;
 use Time::HiRes qw(time);
 use Data::Dumper;
 use Net::SSH2;
+use Tie::IxHash;
 
 use FindBin qw($Bin);
 use lib $Bin;
@@ -72,9 +73,16 @@ GetOptions(
 
 $opt_interval ||= 2;
 
-foreach my $host ( reverse hostlist() ) {
+tie my %hosts, 'Tie::IxHash';
+%hosts = hostlist(keep_comments => 1);
+$hostname_pad = length('hostname: '); # reset this since this script uses short hostnames
+
+foreach my $host ( keys %hosts ) {
     # connect to the host over ssh
-    my $bundle = DshPerlHostLoop::Bundle->new({ host => $host, port => 22 }) ; # ssh connection + metadata
+    my $bundle = DshPerlHostLoop::Bundle->new({
+        host    => $host,
+        port    => 22
+    }) ; # ssh connection + metadata
 
     print BLUE, "Connecting to $host via SSH ... ", RESET;
     eval {
@@ -97,6 +105,8 @@ foreach my $host ( reverse hostlist() ) {
         $hostname_pad = length($hn) + 2;
     }
 
+    $bundle->comment($hosts{$host});
+
     # set up the polling command and add to the poll list
     push @ssh, [ $host, $bundle, '/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats' ];
     push @sorted_host_list, $host;
@@ -115,6 +125,7 @@ sub cl_netstat {
     foreach my $host ( @ssh ) {
         $stats{$host->[0]} = libssh2_slurp_cmd($host->[1], $host->[2]);
         $times{$host->[0]} = time();
+        push @{$stats{$host->[0]}}, $host->[1]->comment || '';
     }
 
     foreach my $hostname ( keys %stats ) {
@@ -123,6 +134,9 @@ sub cl_netstat {
             $struct->{$hostname} = undef;
             next;
         }
+
+        # pass the host comment through
+        $struct->{$hostname}{comment} = pop @{$stats{$hostname}};
 
         my @legend;
         $struct->{$hostname}{dsk_rdi} = 0;
@@ -270,10 +284,11 @@ while ( 1 ) {
             io_c($diff{$host}->[5]);
 
         # load average
-        printf "%s%5s %s%5s %s%5s\n",
+        printf "%s%5s %s%5s %s%5s %s%s%s\n",
             la_c($current->{$host}{la_short}),
             la_c($current->{$host}{la_medium}),
-            la_c($current->{$host}{la_long});
+            la_c($current->{$host}{la_long}),
+            DKGRAY, $current->{$host}{comment} || '', RESET;
 
         $host_count++;
         $host_r_total += $diff{$host}->[0] + $diff{$host}->[2];

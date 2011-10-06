@@ -404,20 +404,32 @@ sub libssh2_slurp_cmd {
 Returns an array of hosts to be accessed.  This reads the hostname list (-m $file or default ~/.dsh/machines.list)
 then filters it based on --excl and --incl regular expressions.  
 
+ my @hosts = hostlist();
+
+ # use Tie::IxHash to preserve insertion order if desired
+ tie my %hosts_and_comments, 'Tie::IxHash';
+ %hosts_and_comments = hostlist(want_comments => 1);
+
 =cut
 
 sub hostlist {
+    my %options = @_;
+
     my @hostlist;
     open( my $fh, "< $machines_list" )
         or die "Could not open machine list file '$machines_list' for reading: $!";
 
-    HOST: while ( my $hostname = <$fh> ) {
-        chomp $hostname;
+    HOST: while ( my $line = <$fh> ) {
+        chomp $line;
+        next if ( $line =~ /^\s*#/ );
+
+        my($hostname, $comment) = split /#/, $line, 2;
         $hostname =~ s/\s//g;
-        $hostname =~ s/#.*$//g;
+        $comment ||= '';
+        $comment =~ s/^\s+//;
+        $comment =~ s/\s+$//;
 
         next unless ( length $hostname );
-        next if ( $hostname =~ /^#/ );
 
         FILTER_EX: foreach my $excl ( @opt_filter_excl ) {
             if ( $hostname =~ /$excl/ ) {
@@ -437,7 +449,12 @@ sub hostlist {
             $hostname_pad = length($hostname) + 2;
         }
 
-        push @hostlist, $hostname;
+        if ($options{keep_comments}) {
+            push @hostlist, $hostname, $comment;
+        }
+        else {
+            push @hostlist, $hostname;
+        }
     }
 
     close $fh;
