@@ -205,7 +205,10 @@ sub diff_cl_netstat {
     my %out;
 
     foreach my $host ( keys %$s1 ) {
-        next if not defined $s1->{$host};
+        if (not defined $s1->{$host}) {
+            $out{$host} = [ 0, 0, 0, 0, 0, 0 ];
+            next;
+        }
 
         my $seconds = $s1->{$host}{last_update} - $s2->{$host}{last_update}; 
 
