@@ -134,6 +134,11 @@ clusters I want to connect to at screen startup so I can do something like the f
 
 This repo includes .screenrc-main based on what I use all the time.
 
+=head1 REQUIREMENTS
+
+Base perl with Tie::IxHash for most of the tools.  cl-netstat.pl requires Net::SSH2 built against a fairly modern libssh2.
+The ruby utils are probably fine with a base system ruby 1.8 or 1.9.
+
 =head1 INSTALLATION
 
 I usually symlink all these files into ~/bin, which my ~/.profile sets to be in my PATH.

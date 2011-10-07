@@ -37,6 +37,7 @@ use Pod::Usage;
 use Getopt::Long;
 use File::Copy qw( copy );
 use IO::Handle;
+use Sys::Hostname;
 
 use FindBin qw($Bin);
 use lib $Bin;
@@ -73,37 +74,16 @@ if ( $script && $command ) {
     pod2usage( -message => "-s and -c are mutually exclusive" );
 }
 
-my( $fh, $cmdfile ) = my_tempfile();
-if ( $command ) {
-    print $fh "#!/bin/bash\n\n";
-    print $fh "export DEBIAN_FRONTEND=noninteractive\n";
-    print $fh "cd /tmp\n";
-    if ( $remote_output ) {
-        print $fh "outfile=$remote_output\n";
-    }
-    else {
-        print $fh "outfile=/tmp/`hostname`.output\n";
-    }
-    print $fh "rm -f \$outfile\n";
-    if ( $background ) {
-        print $fh "nohup $command &\n";
-    }
-    else {
-        print $fh "$command\n";
-    }
-    print $fh "rm -f $cmdfile\n";
-    close $fh;
-}
-else {
-    close $fh;
-    copy( $script, $cmdfile );
-    chmod( 0755, $cmdfile );
-}
-
 func_loop( \&runit );
 
 sub runit {
-    my $host = shift;
+    my( $host, $comment ) = @_;
+
+    my $cmdfile = create_command_file( $command, $script, {
+        CNAME   => $host,
+        COMMENT => $comment,
+        ORIGIN  => Sys::Hostname::hostname()
+    } );
 
     my $scp = "/usr/bin/scp -q $ssh_options $cmdfile $remote_user\@$host:$cmdfile";
     if (verbose()) {
@@ -135,6 +115,44 @@ sub runit {
     }
 
     exit 0;
+}
+
+sub create_command_file {
+    my( $lcommand, $script, $vars ) = @_;
+
+    my( $fh, $cmdfile ) = my_tempfile();
+    if ( $command ) {
+        print $fh "#!/bin/bash\n\n";
+        print $fh "export DEBIAN_FRONTEND=noninteractive\n";
+
+        foreach my $var (keys %$vars) {
+            printf $fh "%s='%s' ; export %s\n", $var, $vars->{$var}, $var;
+        }
+
+        print $fh "cd /tmp\n";
+        if ( $remote_output ) {
+            print $fh "outfile=$remote_output\n";
+        }
+        else {
+            print $fh "outfile=/tmp/`hostname`.output\n";
+        }
+        print $fh "rm -f \$outfile\n";
+        if ( $background ) {
+            print $fh "nohup $command &\n";
+        }
+        else {
+            print $fh "$command\n";
+        }
+        print $fh "rm -f $cmdfile\n";
+        close $fh;
+    }
+    else {
+        close $fh;
+        copy( $script, $cmdfile );
+        chmod( 0755, $cmdfile );
+    }
+
+    return $cmdfile;
 }
 
 # vim: et ts=4 sw=4 ai smarttab

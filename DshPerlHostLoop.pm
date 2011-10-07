@@ -18,6 +18,7 @@ use IO::Handle;
 use Sys::Hostname ();
 use Fcntl ':flock';
 use File::Temp qw(tempfile);
+use Tie::IxHash;
 eval { use Net::SSH2; }; # optional
 use base 'Exporter';
 
@@ -117,7 +118,10 @@ sub func_loop {
     }
 
     my %pids;
-    foreach my $hostname ( hostlist() ) {
+    tie my %hosts, 'Tie::IxHash';
+    %hosts = hostlist(keep_comments => 1);
+
+    foreach my $hostname ( keys %hosts ) {
         my $pid = fork();
         if ( $pid ) {
             $pids{$hostname} = $pid;
@@ -125,7 +129,7 @@ sub func_loop {
         }
         else {
             eval { $0 = "$0 -- $hostname"; };
-            my @out = eval { $f->( $hostname ); };
+            my @out = eval { $f->( $hostname, $hosts{$hostname} ); };
             if ( $@ ) {
                 confess $@;
             }
@@ -619,6 +623,7 @@ sub my_tempfile {
     push @parts, CORE::time;
 
     my $filename = $tempdir . '/' . join('-', @parts);
+       $filename =~ s/\s+//g;
 
     open(my $fh, "> $filename")
         or die "Couldn't open tempfile for write: $!";
