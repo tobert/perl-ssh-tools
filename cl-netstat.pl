@@ -124,6 +124,7 @@ sub cl_netstat {
 
     foreach my $host ( @ssh ) {
         $stats{$host->[0]} = libssh2_slurp_cmd($host->[1], $host->[2]);
+        next unless $stats{$host->[0]};
         $times{$host->[0]} = time();
         push @{$stats{$host->[0]}}, $host->[1]->comment || '';
     }
@@ -206,7 +207,8 @@ sub diff_cl_netstat {
 
     foreach my $host ( keys %$s1 ) {
         if (not defined $s1->{$host}) {
-            $out{$host} = [ 0, 0, 0, 0, 0, 0 ];
+            $out{$host} = undef;
+            #$out{$host} = [ 0, 0, 0, 0, 0, 0 ];
             next;
         }
 
@@ -244,7 +246,7 @@ my( $iterations, $total_send, $total_recv, $total_disk_read, $total_disk_write, 
 my $previous = cl_netstat();
 print GREEN, "Acquired first round. Output begins in $opt_interval seconds.\n", WHITE;
 sleep $opt_interval;
-while ( 1 ) {
+FOREVER: while ( 1 ) {
     my $current = cl_netstat();
     $iterations++;
 
@@ -261,7 +263,7 @@ while ( 1 ) {
     my $host_dr_total = 0;
     my $host_dw_total = 0;
 
-    foreach my $host ( @sorted_host_list ) {
+    HOST: foreach my $host ( @sorted_host_list ) {
         my $hostname = $host;
         $hostname =~ s/\.[a-zA-Z]+.*$//;
 
@@ -270,7 +272,7 @@ while ( 1 ) {
             my $bundle = $host_bundles{$host};
             printf "%s% ${hostname_pad}s: disconnected, retry attempt %d in %d seconds ...%s\n",
                 DKGRAY, $hostname, $bundle->retries || 1, int($bundle->next_attempt - time), RESET;
-            next;
+            next HOST;
         }
 
         # eth0

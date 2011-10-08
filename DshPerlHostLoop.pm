@@ -379,6 +379,9 @@ sub libssh2_slurp_cmd {
     my( $bundle, $cmd ) = @_;
 
     libssh2_reconnect( $bundle ) unless ( ref $bundle && $bundle->ssh2 );
+    unless ($bundle && $bundle->ssh2) {
+        return undef;
+    }
 
     my $data = '';
     eval {
@@ -425,9 +428,11 @@ sub hostlist {
 
     HOST: while ( my $line = <$fh> ) {
         chomp $line;
+        next unless ( $line && length $line );
         next if ( $line =~ /^\s*#/ );
 
-        my($hostname, $comment) = split /#/, $line, 2;
+        my($hostname, $comment) = split( /\s*#\s*/, $line, 2 );
+
         $hostname =~ s/\s//g;
         $comment ||= '';
         $comment =~ s/^\s+//;
