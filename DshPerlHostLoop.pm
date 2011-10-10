@@ -561,9 +561,13 @@ BEGIN {
             push @to_kill, $i;
             $verbose = 1;
         }
+        if ( $main::ARGV[$i] eq '--user' ) {
+            push @to_kill, $i, $i+1;
+            $remote_user = $main::ARGV[$i+1];
+        }
         if ( $main::ARGV[$i] eq '--root' ) {
-          push @to_kill, $i;
-          $remote_user = 'root';
+            push @to_kill, $i;
+            $remote_user = 'root';
         }
     }
 
