@@ -79,6 +79,7 @@ func_loop( \&runit );
 sub runit {
     my( $host, $comment ) = @_;
 
+    # make my ps prettier when using ssh control master
     my $cmdfile = create_command_file( $command, $script, {
         CNAME   => $host,
         COMMENT => $comment,
@@ -124,6 +125,7 @@ sub create_command_file {
     if ( $command ) {
         print $fh "#!/bin/bash\n\n";
         print $fh "export DEBIAN_FRONTEND=noninteractive\n";
+        print $fh "EXIT=0\n";
 
         foreach my $var (keys %$vars) {
             printf $fh "%s='%s' ; export %s\n", $var, $vars->{$var}, $var;
@@ -143,7 +145,9 @@ sub create_command_file {
         else {
             print $fh "$command\n";
         }
+        print $fh "EXIT=\$?\n";
         print $fh "rm -f $cmdfile\n";
+        print $fh "exit \$EXIT\n";
         close $fh;
     }
     else {

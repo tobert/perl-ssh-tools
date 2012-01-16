@@ -25,7 +25,7 @@ use base 'Exporter';
 # globals!
 our @opt_filter_excl;
 our @opt_filter_incl;
-our $ssh_options = "-o 'BatchMode yes' -o 'StrictHostKeyChecking no' -o 'ConnectTimeout 10'";
+our $ssh_options .= " -o 'BatchMode yes' -o 'StrictHostKeyChecking no' -o 'ConnectTimeout 10'";
 our $tag_output = 1;
 our $debug = undef;
 our $verbose;
