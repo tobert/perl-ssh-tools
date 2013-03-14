@@ -45,7 +45,7 @@ func_loop( \&runit );
 sub runit {
     my $host = shift;
 
-    my @out = ssh( $remote_user.'@'.$host, "ps -eo pid,args" );
+    my @out = ssh( $remote_user.'@'.$host, "ps -ewwwo pid,args" );
     my $fh;
     for my $line ( @out ) {
         next unless ( $line =~ /$proc/ );
