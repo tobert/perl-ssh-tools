@@ -131,12 +131,12 @@ sub create_command_file {
             printf $fh "%s='%s' ; export %s\n", $var, $vars->{$var}, $var;
         }
 
-        print $fh "cd /tmp\n";
+        print $fh "cd /var/tmp\n";
         if ( $remote_output ) {
             print $fh "outfile=$remote_output\n";
         }
         else {
-            print $fh "outfile=/tmp/`hostname`.output\n";
+            print $fh "outfile=/var/tmp/`hostname`.output\n";
         }
         print $fh "rm -f \$outfile\n";
         if ( $background ) {
