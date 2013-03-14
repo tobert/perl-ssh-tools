@@ -219,6 +219,16 @@ sub diff_cl_netstat {
             if ( $iface =~ /eth\d+/ ) {
                 my $rdiff = $s1->{$host}{$iface}{rbytes} - $s2->{$host}{$iface}{rbytes};
                 my $tdiff = $s1->{$host}{$iface}{tbytes} - $s2->{$host}{$iface}{tbytes};
+
+                # watch for counter rollover
+                if ($s1->{$host}{$iface}{rbytes} < $s2->{$host}{$iface}{rbytes}) {
+                  # wrong, but better than the huge negative numbers
+                  # fixing correctly will require keeping diffs across iterations
+                  $rdiff = $s2->{$host}{$iface}{rbytes};
+                }
+                if ($s1->{$host}{$iface}{tbytes} < $s2->{$host}{$iface}{tbytes}) {
+                  $tdiff = $s2->{$host}{$iface}{tbytes};
+                }
                 push @host_traffic, int($rdiff / $seconds), int($tdiff / $seconds);
             }
             #elsif ($iface =~ /^dsk_[rw]d[is]/) {
