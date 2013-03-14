@@ -29,7 +29,7 @@ our $ssh_options .= " -o 'BatchMode yes' -o 'StrictHostKeyChecking no' -o 'Conne
 our $tag_output = 1;
 our $debug = undef;
 our $verbose;
-our $tempdir = '/tmp';
+our $tempdir = '/var/tmp';
 our $mainpid = $$;
 our $machines_list ||= "$ENV{HOME}/.dsh/machines.list"; # can be overridden with --list $name
 our @tempfiles;
@@ -303,6 +303,9 @@ sub libssh2_connect {
 
     for (my $i=0; $i<@keys; $i++) {
         $ssh2->connect( $hostname, $port, Timeout => 3 );
+
+        $ok = $ssh2->auth_agent( $remote_user );
+        last if ($ok);
 
         $ok = $ssh2->auth_publickey( @{$keys[$i]} );
         last if ($ok);
@@ -645,7 +648,7 @@ sub my_tempfile {
 END {
     if ($$ == $mainpid) {
         if (($verbose or $debug) and @tempfiles > 0) {
-            printf STDERR "Leaving tempfiles in /tmp. They are:\n\t%s\n",
+            printf STDERR "Leaving tempfiles in $tempdir. They are:\n\t%s\n",
             join("\n\t", @tempfiles);
         }
         else {
