@@ -53,6 +53,7 @@ our $remote_output     = undef;
 our $background        = undef;
 our $command           = undef;
 our $script            = undef;
+our $sudo              = undef;
 our $help              = undef;
 
 GetOptions(
@@ -63,6 +64,7 @@ GetOptions(
     "e=s" => \$errfile,
     "b"   => \$background,
     "n:i" => \$slaves,
+    "x"   => \$sudo,
     "h"   => \$help
 );
 
@@ -96,7 +98,12 @@ sub runit {
         print STDERR RED, "Could not copy command script to $host!", RESET, $/;
     }
 
-    my @out = ssh( "$remote_user\@$host", "/bin/bash $cmdfile" );
+    my $shell = '/bin/bash';
+    if ( $sudo ) {
+      $shell = 'sudo /bin/bash';
+    }
+
+    my @out = ssh( "$remote_user\@$host", "$shell $cmdfile" );
 
 
     my $fh;
