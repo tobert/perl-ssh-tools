@@ -2,10 +2,6 @@
 
 cluster-ssh-tools - a collection of cluster ssh tools
 
-=head1 NOTICE
-
-I'm going to rename this repo soon on github, considering it's not just perl anymore.
-
 =head1 HISTORY
 
 I often work on clusters of machines where I need to do the same operation to many
@@ -139,6 +135,8 @@ This repo includes .screenrc-main based on what I use all the time.
 Base perl with Tie::IxHash for most of the tools.  cl-netstat.pl requires Net::SSH2 built against a fairly modern libssh2.
 The ruby utils are probably fine with a base system ruby 1.8 or 1.9.
 
+SSH agent support requires Net::SSH2 >= 0.40.
+
 =head1 INSTALLATION
 
 I usually symlink all these files into ~/bin, which my ~/.profile sets to be in my PATH.
@@ -148,16 +146,6 @@ I usually symlink all these files into ~/bin, which my ~/.profile sets to be in 
  $> git clone https://github.com/tobert/perl-ssh-tools.git
  $> ln -s ~/src/perl-ssh-tools/* ~/bin/
  $> export PATH=~/bin:$PATH
-
-=head1 NETSTAT SETUP
-
-I keep my primary ssh key encrypted like any good boy should. Since Net::SSH2 doesn't support ssh-agent,
-I use a secondary key in ~/.ssh/monitor-rsa that is restricted to only support cl-netstat.pl. It looks something like the following.
-
- $> ssh-keygen -t rsa -f ~/.ssh/monitor-rsa -N ''
- $> echo "no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,command=\"/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats\" $(< ~/.ssh/monitor-rsa.pub)" >> ~/.ssh/authorized_keys
- $> cl-sendfile.pl --list cassandra-rec -l ~/.ssh/authorized_keys -r /home/$USER/.ssh/authorized_keys
- # or distribute however you prefer
 
 =head1 SEE ALSO
 
@@ -185,7 +173,7 @@ Al Tobey <tobert@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2007-2011 by Al Tobey.
+This software is copyright (c) 2007-2013 by Al Tobey.
 
 This is free software; you can redistribute it and/or modify it under the terms
 of the Artistic License 2.0.  (Note that, unlike the Artistic License 1.0,
