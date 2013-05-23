@@ -142,20 +142,24 @@ sub cl_netstat {
         my @legend;
         $struct->{$hostname}{dsk_rdi} = 0;
         $struct->{$hostname}{dsk_wdi} = 0;
+        $struct->{$hostname}{net} = {};
 
         foreach my $line ( @{$stats{$hostname}} ) {
             chomp $line;
             if ( $line =~ /bytes\s+packets/ ) {
                 my( $junk, $rl, $tl ) = split /\|/, $line;
-
                 @legend = map { 'r' . $_ } split( /\s+/, $rl );
-
                 push @legend, map { 't' . $_ } split( /\s+/, $tl );
             }
             elsif ( $line =~ /^\s*(eth[01]):\s*(.*)$/ ) {
                 my( $iface, $data ) = ( $1, $2 );
+
                 my @sdata = split /\s+/, $data;
-                $struct->{$hostname}{$iface} = { map { $legend[$_] => $sdata[$_] } 0 .. $#sdata };
+
+                foreach my $idx ( 0 .. $#sdata ) {
+                  $struct->{$hostname}{net}{$legend[$idx]} ||= 0;
+                  $struct->{$hostname}{net}{$legend[$idx]} += $sdata[$idx] || 0;
+                }
             }
             # load average
             # # 0.00 0.00 0.00 1/307 155781
@@ -197,7 +201,7 @@ sub cl_netstat {
         }
         $struct->{$hostname}{last_update} = $times{$hostname};
     }
-     
+
     return $struct;
 }
 
@@ -216,7 +220,7 @@ sub diff_cl_netstat {
 
         my @host_traffic;
         foreach my $iface ( sort keys %{$s1->{$host}} ) {
-            if ( $iface =~ /eth\d+/ ) {
+            if ( $iface eq 'net' ) {
                 my $rdiff = $s1->{$host}{$iface}{rbytes} - $s2->{$host}{$iface}{rbytes};
                 my $tdiff = $s1->{$host}{$iface}{tbytes} - $s2->{$host}{$iface}{tbytes};
 
@@ -264,7 +268,7 @@ FOREVER: while ( 1 ) {
     $previous = $current;
 
     my $header = sprintf "% ${hostname_pad}s: % 13s % 13s % 13s  %12s   %12s     %5s %5s %5s",
-        qw( hostname eth0_total eth0_recv eth0_send read_iops write_iops 1min 5min 15min );
+        qw( hostname net_total net_recv net_send read_iops write_iops 1min 5min 15min );
     print BLUE, $header, $/, '-' x length($header), $/, RESET;
 
     my $host_count = 0;
@@ -285,7 +289,7 @@ FOREVER: while ( 1 ) {
             next HOST;
         }
 
-        # eth0
+        # network
         printf "%s% ${hostname_pad}s: %s% 13s %s% 13s %s% 13s%s",
             WHITE, $hostname,
             net_c($diff{$host}->[0] + $diff{$host}->[1], 2),
