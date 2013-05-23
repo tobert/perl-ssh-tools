@@ -39,15 +39,18 @@ our $local_file       = undef;
 our $remote_file      = undef;
 our $help             = undef;
 our $exclude          = undef;
+our $copy_symlinks    = undef;
 our $dryrun           = undef;
 our $delete           = undef;
 
+Getopt::Long::Configure("no_ignore_case");
 GetOptions(
     "l=s"  => \$local_file,
     "r=s"  => \$remote_file,
     "h"    => \$help,
     "help" => \$help,
     "x=s@" => \$exclude,
+    "L"    => \$copy_symlinks,
     "z"    => \$dryrun,
     "delete" => \$delete
 );
@@ -70,6 +73,13 @@ if ( $delete ) {
 }
 else {
     $delete = '';
+}
+
+if ( $copy_symlinks ) {
+  $copy_symlinks = '-L';
+}
+else {
+  $copy_symlinks = '';
 }
 
 if ( !$exclude ) {
@@ -97,7 +107,7 @@ else {
 
 my $routine = sub {
     my $hostname = shift;
-  my $command = "rsync $dryrun $delete $exclude -ave \"ssh $ssh_options\" $local_file $remote_user\@$hostname:$remote_file";
+  my $command = "rsync $dryrun $delete $copy_symlinks $exclude -ave \"ssh $ssh_options\" $local_file $remote_user\@$hostname:$remote_file";
     if ( $dryrun ne '' ) {
         print STDERR "$command\n";
     }
