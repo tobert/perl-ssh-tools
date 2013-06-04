@@ -40,6 +40,7 @@ our $remote_file      = undef;
 our $help             = undef;
 our $exclude          = undef;
 our $copy_symlinks    = undef;
+our $vcs_exclude      = undef;
 our $dryrun           = undef;
 our $delete           = undef;
 
@@ -51,6 +52,7 @@ GetOptions(
     "help" => \$help,
     "x=s@" => \$exclude,
     "L"    => \$copy_symlinks,
+    "C"    => \$vcs_exclude,
     "z"    => \$dryrun,
     "delete" => \$delete
 );
@@ -68,19 +70,9 @@ if ($help) {
 #    pod2usage();
 #}
 
-if ( $delete ) {
-    $delete = '--delete';
-}
-else {
-    $delete = '';
-}
-
-if ( $copy_symlinks ) {
-  $copy_symlinks = '-L';
-}
-else {
-  $copy_symlinks = '';
-}
+$delete        = $delete        ? '--delete'      : '';
+$vcs_exclude   = $vcs_exclude   ? '--cvs-exclude' : '';
+$copy_symlinks = $copy_symlinks ? '--copy-links'  : '';
 
 if ( !$exclude ) {
     $exclude = '';
@@ -107,7 +99,7 @@ else {
 
 my $routine = sub {
     my $hostname = shift;
-  my $command = "rsync $dryrun $delete $copy_symlinks $exclude -ave \"ssh $ssh_options\" $local_file $remote_user\@$hostname:$remote_file";
+  my $command = "rsync $dryrun $delete $copy_symlinks $vcs_exclude $exclude -ave \"ssh $ssh_options\" $local_file $remote_user\@$hostname:$remote_file";
     if ( $dryrun ne '' ) {
         print STDERR "$command\n";
     }
