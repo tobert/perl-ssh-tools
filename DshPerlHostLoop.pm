@@ -25,7 +25,7 @@ use base 'Exporter';
 # globals!
 our @opt_filter_excl;
 our @opt_filter_incl;
-our $opt_increment;
+our $opt_batch;
 our $ssh_options .= " -o 'BatchMode yes' -o 'StrictHostKeyChecking no' -o 'ConnectTimeout 10'";
 our $tag_output = 1;
 our $debug = undef;
@@ -68,7 +68,7 @@ our @EXPORT = qw(
   func_loop ssh scp hostlist reap verbose my_tempfile tag_output 
   libssh2_connect libssh2_reconnect libssh2_slurp_cmd
   $ssh_options $remote_user $retry_wait $hostname_pad
-  @opt_filter_excl @opt_filter_incl $opt_increment
+  @opt_filter_excl @opt_filter_incl $opt_batch
   lock unlock
   BLACK RED GREEN YELLOW BLUE MAGENTA CYAN WHITE DKGRAY DKRED RESET
 );
@@ -90,7 +90,7 @@ A few global CLI switches are implemented in this module in a BEGIN block.
 
  --incl - a perl regular expression that filters out non-matching hostnames
  --excl - a perl regular expression that filters matched hostnames out of the list
- --incr - run in parallel on every N nodes, shifting by 1 until all are complete
+ --batch - run in parallel on every N nodes, shifting by 1 until all are complete
  --list - name of the list, e.g. ~/.dsh/machines.$NAME
  --root - set remote user to root
  -u     - don't prefix output with the remote hostname
@@ -124,16 +124,16 @@ sub func_loop {
     %hosts = hostlist(keep_comments => 1);
     my @hostnames = keys %hosts;
 
-    # support batched commands in increments of $opt_increment
+    # support batched commands in increments of $opt_batch
     # This is useful for large clusters where doing the whole cluster at once
     # is a bad idea.
     my @batches = ();
-    if ($opt_increment) {
+    if ($opt_batch) {
         @batches = ();
 
-        for (my $b=0; $b<$opt_increment; $b++) {
+        for (my $b=0; $b<$opt_batch; $b++) {
             $batches[$b] = [];
-            for (my $h=$b; $h<@hostnames; $h+=$opt_increment) {
+            for (my $h=$b; $h<@hostnames; $h+=$opt_batch) {
               push @{$batches[$b]}, $hostnames[$h];
             }
         }
@@ -576,9 +576,9 @@ BEGIN {
             my $f = $main::ARGV[$i+1];
             push @opt_filter_excl, qr/$f/;
         }
-        if ( $main::ARGV[$i] eq '--incr' ) {
+        if ( $main::ARGV[$i] eq '--batch' ) {
             push @to_kill, $i, $i+1;
-            $opt_increment = $main::ARGV[$i+1];
+            $opt_batch = $main::ARGV[$i+1];
         }
         if ( $main::ARGV[$i] eq '-u' ) {
             push @to_kill, $i;
