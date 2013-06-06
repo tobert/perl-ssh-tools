@@ -65,7 +65,7 @@ use constant RESET   => "\x1b[0m";
 # class methods so their origin is clearly visible in downstream source.
 # It's on my TODO list ;)
 our @EXPORT = qw(
-  func_loop ssh scp hostlist reap verbose my_tempfile tag_output 
+  func_loop ssh scp hostlist reap verbose my_tempfile tag_output
   libssh2_connect libssh2_reconnect libssh2_slurp_cmd
   $ssh_options $remote_user $retry_wait $hostname_pad
   @opt_filter_excl @opt_filter_incl $opt_batch
@@ -437,7 +437,7 @@ sub libssh2_slurp_cmd {
 =item hostlist()
 
 Returns an array of hosts to be accessed.  This reads the hostname list (-m $file or default ~/.dsh/machines.list)
-then filters it based on --excl and --incl regular expressions.  
+then filters it based on --excl and --incl regular expressions. 
 
  my @hosts = hostlist();
 
@@ -541,7 +541,7 @@ sub verbose {
 # nasty brute force argument stealing :)
 # BEGIN makes sure this runs before Getopt::* as long as that module
 # isn't also called from within a BEGIN block
-BEGIN { 
+BEGIN {
     my @to_kill;
 
     for ( my $i=0; $i<@main::ARGV; $i++ ) {
