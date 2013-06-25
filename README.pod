@@ -147,6 +147,15 @@ I usually symlink all these files into ~/bin, which my ~/.profile sets to be in 
  $> ln -s ~/src/perl-ssh-tools/* ~/bin/
  $> export PATH=~/bin:$PATH
 
+=head1 OSX
+
+You'll need libssh2 and the perl modules. If you're using Macports:
+
+ $> sudo port install perl
+ $> sudo port install libssh2
+ $> sudo /opt/local/bin/perl -MCPAN -e 'install Net::SSH2'
+ $> sudo /opt/local/bin/perl -MCPAN -e 'install Tie::IxHash'
+
 =head1 SEE ALSO
 
 All of the utilities have their own POD and use Pod::Usage.
