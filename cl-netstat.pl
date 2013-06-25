@@ -389,7 +389,7 @@ sub net_c {
         $color = RED;
     }
 
-    return($color, c(shift));
+    return($color, c($value));
 }
 
 sub io_c {
@@ -418,6 +418,7 @@ sub io_c {
 sub c {
     my $val = int(shift);
     $val =~ s/(?<=\d)(\d{3})$/,$1/;
+    $val =~ s/(?<=\d)(\d{3}),/,$1,/g;
     $val =~ s/(?<=\d)(\d{3}),/,$1,/g;
     return $val;
 }
