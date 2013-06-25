@@ -4,7 +4,7 @@ $|++;
 ###########################################################################
 #                                                                         #
 # Cluster Tools: cl-killall.pl                                            #
-# Copyright 2007-2011, Albert P. Tobey <tobert@gmail.com>                 #
+# Copyright 2007-2013, Albert P. Tobey <tobert@gmail.com>                 #
 #                                                                         #
 ###########################################################################
 
@@ -52,15 +52,16 @@ unless ( @ARGV > 0 ) {
 if ( $signal ) {
     pod2usage( -message => "Invalid signal '$signal'." )
         unless ( looks_like_number($signal) or $signal =~ /^(?:HUP|USR1|USR2)$/ );
-        
+
     $command .= "-$signal ";
 }
+
+$command .= join(' ', @ARGV);
 
 func_loop( \&runit );
 
 sub runit {
     my $host = shift;
-    $command .= join(' ', @ARGV);
     my @out = ssh( $host, $command );
 }
 
