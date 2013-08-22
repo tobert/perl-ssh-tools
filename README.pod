@@ -158,6 +158,10 @@ You'll need libssh2 and the perl modules. If you're using Macports:
 
 =head1 SEE ALSO
 
+The docs for common options are in DshPerlHostLoop.pm.
+
+ perldoc ~/bin/DshPerlHostLoop.pm
+
 All of the utilities have their own POD and use Pod::Usage.
 
 cl-run.pl
