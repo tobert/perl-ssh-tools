@@ -93,6 +93,7 @@ A few global CLI switches are implemented in this module in a BEGIN block.
  --batch - run in parallel on every N nodes, shifting by 1 until all are complete
  --list - name of the list, e.g. ~/.dsh/machines.$NAME
  --root - set remote user to root
+ --user - set the remote username to something other than $USER or root
  -u     - don't prefix output with the remote hostname
  -v     - verbose
  -m     - specify a file with a list of hosts to use (default is ~/.dsh/machines.list)
