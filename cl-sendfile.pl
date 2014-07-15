@@ -39,7 +39,6 @@ use FindBin qw($Bin);
 use lib $Bin;
 use DshPerlHostLoop;
 
-our $slaves           = undef;
 our $local_file       = undef;
 our $remote_file      = undef;
 our $help             = undef;
@@ -47,7 +46,6 @@ our $help             = undef;
 GetOptions(
     "l=s" => \$local_file,
     "r=s" => \$remote_file,
-    "n:i" => \$slaves,
     "h"   => \$help
 );
 
@@ -63,10 +61,6 @@ unless ( ($local_file && $remote_file && -r $local_file) || $help ) {
 #my $dir = dirname( $remote_file );
 #system( "mkdir -p $ENV{HOME}/files/$dir" );
 #copy( $local_file, "$ENV{HOME}/files/$remote_file" );
-
-if ( $slaves ) {
-    set_host_count( $slaves );
-}
 
 my $routine = sub {
     my $hostname = shift;
