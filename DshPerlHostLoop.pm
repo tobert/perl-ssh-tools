@@ -651,6 +651,8 @@ sub unlock {
 Not secure. Generates a parseable-by-humans tempfile so people can
 tell what junk in /tmp is from.
 
+ my($fh, $name) = my_tempfile();
+
 =cut
 
 sub my_tempfile {
