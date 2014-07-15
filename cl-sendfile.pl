@@ -23,6 +23,7 @@ from default installs easier.
  cl-sendfile.pl [-l $LOCAL_FILE] [-r $REMOTE_FILE] [-h] [-v] [--incl <pattern>] [--excl <pattern>]
         -l: local file/directory to rsync - passed through unmodified to rsync
         -r: remote location for rsync to write to - also unmodified
+        -x: stage the file as a normal user and relocate using sudo (requires sudo root/NOPASSWD)
         -v: verbose output
         -h: print this message
 =cut
@@ -42,10 +43,13 @@ use DshPerlHostLoop;
 our $local_file       = undef;
 our $remote_file      = undef;
 our $help             = undef;
+our $sudo             = undef;
+our $final_file       = undef;
 
 GetOptions(
     "l=s" => \$local_file,
     "r=s" => \$remote_file,
+    "x"   => \$sudo,
     "h"   => \$help
 );
 
@@ -57,17 +61,25 @@ unless ( ($local_file && $remote_file && -r $local_file) || $help ) {
     pod2usage();
 }
 
-# save all the files sent out to a local tree so it's easy to reproduce the cluster
-#my $dir = dirname( $remote_file );
-#system( "mkdir -p $ENV{HOME}/files/$dir" );
-#copy( $local_file, "$ENV{HOME}/files/$remote_file" );
+$final_file = $remote_file;
+if ( $sudo ) {
+    (my $fh, $remote_file) = my_tempfile();
+    close $fh;
+    unlink $remote_file;
+}
 
-my $routine = sub {
-    my $hostname = shift;
-    scp( $local_file, "$hostname:$remote_file" );
-};
+func_loop(sub {
+    my $host = shift;
+    scp( $local_file, "$host:$remote_file" );
+});
 
-func_loop( $routine );
+if ( $sudo ) {
+    func_loop(sub {
+        my $host = shift;
+        ssh( "$remote_user\@$host", "sudo cp $remote_file $final_file" );
+        ssh( "$remote_user\@$host", "rm $remote_file" );
+    });
+}
 
 # vim: et ts=4 sw=4 ai smarttab
 
