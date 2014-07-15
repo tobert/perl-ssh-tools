@@ -151,7 +151,7 @@ sub cl_netstat {
                 @legend = map { 'r' . $_ } split( /\s+/, $rl );
                 push @legend, map { 't' . $_ } split( /\s+/, $tl );
             }
-            elsif ( $line =~ /^\s*(eno|eth)(\d+):\s*(.*)$/ ) {
+            elsif ( $line =~ /^\s*(e\w+)(\d+):\s*(.*)$/ ) {
                 my( $iface, $data ) = ( $1 . $2, $3 );
 
                 my @sdata = split /\s+/, $data;
