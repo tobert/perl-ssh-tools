@@ -104,7 +104,6 @@ sub runit {
 
     my @out = ssh( "$remote_user\@$host", "$shell $cmdfile" );
 
-
     my $fh;
     if ( $local_output_file ) {
         lock(); # uses flock under the hood in DshPerlHostLoop
