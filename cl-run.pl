@@ -46,7 +46,6 @@ use DshPerlHostLoop;
 select(STDERR);
 
 our $errfile           = "&1";
-our $slaves            = undef;
 our $tag_local_output  = undef;
 our $local_output_file = undef;
 our $remote_output     = undef;
@@ -63,7 +62,6 @@ GetOptions(
     "r=s" => \$remote_output,
     "e=s" => \$errfile,
     "b"   => \$background,
-    "n:i" => \$slaves,
     "x"   => \$sudo,
     "h"   => \$help
 );
