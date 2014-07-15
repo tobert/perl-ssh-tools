@@ -27,6 +27,7 @@ This script parallelizes ssh access to hosts.
         -e: file to write errors to
         -b: background the jobs on the remote host
                 - equivalent to \"nohup command &\"
+		-x: run as root through sudo (requires NOPASSWD: on remote host)
         -h: print this message
 
 =cut
