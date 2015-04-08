@@ -54,6 +54,7 @@ our $background        = undef;
 our $command           = undef;
 our $script            = undef;
 our $sudo              = undef;
+our $nowrap            = undef;
 our $help              = undef;
 
 GetOptions(
@@ -64,6 +65,7 @@ GetOptions(
     "e=s" => \$errfile,
     "b"   => \$background,
     "x"   => \$sudo,
+    "n"   => \$nowrap,
     "h"   => \$help
 );
 
@@ -79,27 +81,33 @@ func_loop( \&runit );
 
 sub runit {
     my( $host, $comment ) = @_;
+    my $cmdfile;
 
-    # make my ps prettier when using ssh control master
-    my $cmdfile = create_command_file( $command, $script, {
-        CNAME   => $host,
-        COMMENT => $comment,
-        ORIGIN  => Sys::Hostname::hostname()
-    } );
-
-    my $scp = "/usr/bin/scp -q $ssh_options $cmdfile $remote_user\@$host:$cmdfile";
-    if (verbose()) {
-        $scp =~ s/scp -q/scp/;
-        print STDERR "COMMAND: $scp\n" if ( verbose() );
+    if ($nowrap) {
+        $cmdfile = $command;
     }
-    system( $scp );
-    if ($? != 0) {
-        print STDERR RED, "Could not copy command script to $host!", RESET, $/;
+    else {
+        $cmdfile = create_command_file( $command, $script, {
+            CNAME   => $host,
+            COMMENT => $comment,
+            ORIGIN  => Sys::Hostname::hostname()
+        } );
+
+        my $scp = "/usr/bin/scp -q $ssh_options $cmdfile $remote_user\@$host:$cmdfile";
+        if (verbose()) {
+            $scp =~ s/scp -q/scp/;
+            print STDERR "COMMAND: $scp\n" if ( verbose() );
+        }
+
+        system( $scp );
+        if ($? != 0) {
+            print STDERR RED, "Could not copy command script to $host!", RESET, $/;
+        }
     }
 
     my $shell = '/bin/bash';
     if ( $sudo ) {
-      $shell = 'sudo /bin/bash';
+        $shell = 'sudo /bin/bash';
     }
 
     my @out = ssh( "$remote_user\@$host", "$shell $cmdfile" );
