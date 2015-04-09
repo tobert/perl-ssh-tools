@@ -127,15 +127,16 @@ sub func_loop {
 
     # support batched commands in increments of $opt_batch
     # This is useful for large clusters where doing the whole cluster at once
-    # is a bad idea.
+    # is a bad idea. Set --batch 1 for serial execution.
     my @batches = ();
-    if ($opt_batch) {
-        @batches = ();
+    $opt_batch ||= 0;
+    if ($opt_batch > 0) {
+        my $batch_count = scalar(@hostnames) / $opt_batch;
 
-        for (my $b=0; $b<$opt_batch; $b++) {
-            $batches[$b] = [];
-            for (my $h=$b; $h<@hostnames; $h+=$opt_batch) {
-              push @{$batches[$b]}, $hostnames[$h];
+        for (my $b=0; $b<$batch_count; $b++) {
+            for (my $h=0; $h<$opt_batch; $h++) {
+                my $host = shift(@hostnames);
+                push @{$batches[$b]}, $host;
             }
         }
     }
