@@ -62,7 +62,7 @@ func_loop( \&runit );
 
 sub runit {
     my $host = shift;
-    my $remote = "$host:$remote_file";
+    my $remote = "$remote_user\@$host:$remote_file";
     my $dest = $local_dir;
 
     if ( $append_hostname ) {
