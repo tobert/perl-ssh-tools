@@ -317,7 +317,6 @@ sub libssh2_connect {
             $ENV{HOME}.'/.ssh/monitor-rsa.pub',
             $ENV{HOME}.'/.ssh/monitor-rsa'
         ],
-        # the normal setup - ssh-agent isn't supported yet
         [
             $remote_user,
             $sshkey . '.pub', # this should usually be correct
