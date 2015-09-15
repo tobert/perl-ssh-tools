@@ -37,11 +37,11 @@ In my experience, the load incurred on monitored hosts is unmeasurable.
 
 1.) password-less ssh access to all the hosts in the machine list
 2.) ssh key in ~/.ssh/id_rsa or ~/.ssh/monitor-rsa
-3.) ability to /bin/cat /proc/net/dev /proc/loadavg /proc/diskstats
+3.) ability to /bin/cat /proc/net/dev /proc/diskstats
 
 If you want to have a special key that is restricted to the cat command, here's an example:
 
- no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,command="/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats" ssh-rsa AAAA...== al@mybox.com
+ no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty,command="/bin/cat /proc/net/dev /proc/diskstats" ssh-rsa AAAA...== al@mybox.com
 
 =cut
 
@@ -84,7 +84,7 @@ foreach my $host ( keys %hosts ) {
         port    => 22
     }) ; # ssh connection + metadata
 
-    print BLUE, "Connecting to $host via SSH ... ", RESET;
+    print CYAN, "Connecting to $host via SSH ... ", RESET;
     eval {
         $bundle = libssh2_connect($host, 22);
     };
@@ -108,7 +108,7 @@ foreach my $host ( keys %hosts ) {
     $bundle->comment($hosts{$host});
 
     # set up the polling command and add to the poll list
-    push @ssh, [ $host, $bundle, '/bin/cat /proc/net/dev /proc/loadavg /proc/diskstats' ];
+    push @ssh, [ $host, $bundle, '/bin/cat /proc/net/dev /proc/diskstats' ];
     push @sorted_host_list, $host;
     $host_bundles{$host} = $bundle;
 }
@@ -140,8 +140,10 @@ sub cl_netstat {
         $struct->{$hostname}{comment} = pop @{$stats{$hostname}};
 
         my @legend;
-        $struct->{$hostname}{dsk_rdi} = 0;
-        $struct->{$hostname}{dsk_wdi} = 0;
+        $struct->{$hostname}{dsk_rds} = 0; # read sectors counter
+        $struct->{$hostname}{dsk_rwt} = 0; # read wait ms counter
+        $struct->{$hostname}{dsk_wds} = 0; # write sectors counter
+        $struct->{$hostname}{dsk_wwt} = 0; # write wait ms counter
         $struct->{$hostname}{net} = {};
 
         foreach my $line ( @{$stats{$hostname}} ) {
@@ -161,23 +163,17 @@ sub cl_netstat {
                   $struct->{$hostname}{net}{$legend[$idx]} += $sdata[$idx] || 0;
                 }
             }
-            # load average
-            # # 0.00 0.00 0.00 1/307 155781
-            elsif ($line =~ /(\d+\.\d+) (\d+\.\d+) (\d+\.\d+) \d+\/\d+ \d+/) {
-                $struct->{$hostname}{la_short}  = $1;
-                $struct->{$hostname}{la_medium} = $2;
-                $struct->{$hostname}{la_long}   = $3;
-           }
            # 8  0 sda 298890 2980 5498843 92328 10123211 2314394 134218078 10756944 0 419132 10866136
            # 8  5 sda5 5540 826 44511 1528 15558 55975 572334 68312 0 2932 69848
            # 8 32 sdc 913492 273 183151490 8217340 2047310 0 37711114 1259728 0 1267508 9476068
            # 8 16 sdb 2640 380 18329 2860 1751748 13461886 121702720 249041290 78 2654720 249048720
            # 8 1  sda1 35383589 4096190 515794290 173085956 58990656 100542811 1276270912 205189188 0 135658516 378268412
-           # ignore whole devices, add up paritions, because EC2 machines get disks with partitions but not whole
-           # disks (fucking xen)
+           # EC2 machines get disks with partitions but not whole disks
+		   # TODO: sort out devices to make sure partitions are not double-counted with whole devices
+		   #
            # from Documentation/iostats.txt:
            # Field  1 -- # of reads completed
-           # Field  2 -- # of reads merged, field 6 -- # of writes merged
+           # Field  2 -- # of reads merged
            # Field  3 -- # of sectors read
            # Field  4 -- # of milliseconds spent reading
            # Field  5 -- # of writes completed
@@ -188,14 +184,13 @@ sub cl_netstat {
            # Field 10 -- # of milliseconds spent doing I/Os
            # Field 11 -- weighted # of milliseconds spent doing I/Os
            #
-           # example:            8     1          sda1 35383589 4096190 515794290 173085956 58990656 100542811 
-           # capture:                         $1     $2                        $3
-           # field:             major minor device    1      2     3     4      5   ... 6-11
-           elsif ($line =~ /^\s*\d+\s+\d+\s+(\w+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+(\d+)\s+/) {
+           # capture:           major minor   $1      $2      $3      $4      $5      $6      $7      $8      $9      $10 ...
+           elsif ($line =~ /^\s*\d+\s+\d+\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+/) {
                 if (not $opt_device or $opt_device eq $1) {
-                    $struct->{$hostname}{dsk_rdi} += $2;
-                    $struct->{$hostname}{dsk_wdi} += $3;
-                    #$struct->{$hostname}{dsk_wms} += $4;
+                    $struct->{$hostname}{dsk_rds} += $2;
+                    $struct->{$hostname}{dsk_rwt} += $5;
+                    $struct->{$hostname}{dsk_wds} += $6;
+                    $struct->{$hostname}{dsk_wwt} += $9;
                 }
             }
         }
@@ -223,30 +218,33 @@ sub diff_cl_netstat {
             if ( $iface eq 'net' ) {
                 my $rdiff = $s1->{$host}{$iface}{rbytes} - $s2->{$host}{$iface}{rbytes};
                 my $tdiff = $s1->{$host}{$iface}{tbytes} - $s2->{$host}{$iface}{tbytes};
+                my $tput = ($s1->{$host}{$iface}{rpackets} - $s2->{$host}{$iface}{rpackets})
+                         + ($s1->{$host}{$iface}{tpackets} - $s2->{$host}{$iface}{tpackets});
 
-                # watch for counter rollover
+                # counter rollover
                 if ($s1->{$host}{$iface}{rbytes} < $s2->{$host}{$iface}{rbytes}) {
-                  # wrong, but better than the huge negative numbers
-                  # fixing correctly will require keeping diffs across iterations
+                  # this trades off the accuracy of one iteration to avoid having
+                  # to track deltas across iterations
                   $rdiff = $s2->{$host}{$iface}{rbytes};
                 }
                 if ($s1->{$host}{$iface}{tbytes} < $s2->{$host}{$iface}{tbytes}) {
                   $tdiff = $s2->{$host}{$iface}{tbytes};
                 }
+
+				# 0: read_bytesps, 1: write_bytesps
                 push @host_traffic, int($rdiff / $seconds), int($tdiff / $seconds);
+				# 2: total_byteps, 3: 0 (using an array here was silly, should be hash)
+				push @host_traffic, int($tput / $seconds), 0;
             }
-            #elsif ($iface =~ /^dsk_[rw]d[is]/) {
-            #   print "$iface: " . Dumper($s1->{$host}{$iface});
-            #}
         }
 
-        # for now, just set second interface to 0 if it doesn't exist
-        if ( @host_traffic == 2 ) {
-            push @host_traffic, 0, 0;
-        }
+		# iops
+        $host_traffic[4] = ($s1->{$host}{dsk_rds} - $s2->{$host}{dsk_rds}) / $seconds;
+        $host_traffic[5] = ($s1->{$host}{dsk_wds} - $s2->{$host}{dsk_wds}) / $seconds;
 
-        $host_traffic[4] = ($s1->{$host}{dsk_rdi} - $s2->{$host}{dsk_rdi}) / $seconds;
-        $host_traffic[5] = ($s1->{$host}{dsk_wdi} - $s2->{$host}{dsk_wdi}) / $seconds;;
+		# iowait
+        $host_traffic[6] = ($s1->{$host}{dsk_rwt} - $s2->{$host}{dsk_rwt});
+        $host_traffic[7] = ($s1->{$host}{dsk_wwt} - $s2->{$host}{dsk_wwt});
 
         $out{$host} = \@host_traffic;
     }
@@ -255,7 +253,12 @@ sub diff_cl_netstat {
 
 ### MAIN
 
-my( $iterations, $total_send, $total_recv, $total_disk_read, $total_disk_write, %averages ) = ( 0, 0, 0, 0, 0, () );
+my($iterations, %averages) = (0, ());
+
+# these totals are for the lifetime of this process
+my($total_net_tx, $total_net_rx) = (0, 0);
+my($total_disk_riops, $total_disk_wiops) = (0, 0);
+my($total_disk_rwait, $total_disk_wwait) = (0, 0);
 
 my $previous = cl_netstat();
 print GREEN, "Acquired first round. Output begins in $opt_interval seconds.\n", WHITE;
@@ -267,15 +270,15 @@ FOREVER: while ( 1 ) {
     my %diff = diff_cl_netstat( $current, $previous );
     $previous = $current;
 
-    my $header = sprintf "% ${hostname_pad}s: % 13s % 13s % 13s  %12s   %12s     %5s %5s %5s",
-        qw( hostname net_total net_recv net_send read_iops write_iops 1min 5min 15min );
-    print BLUE, $header, $/, '-' x length($header), $/, RESET;
+    my $header = sprintf "% ${hostname_pad}s: % 13s % 13s % 14s %8s %8s %8s %8s",
+        qw( hostname net_packets net_rx_bytes net_tx_bytes dsk_riops dsk_wiops rwait_ms wwait_ms );
+    print CYAN, $header, $/, '-' x length($header), $/, RESET;
 
-    my $host_count = 0;
-    my $host_r_total = 0;
-    my $host_s_total = 0;
-    my $host_dr_total = 0;
-    my $host_dw_total = 0;
+	# iteration totals
+	my $host_count = 0;
+	my($ivl_net_rx_total, $ivl_net_tx_total) = (0, 0);
+	my($ivl_riops_total, $ivl_wiops_total) = (0, 0);
+	my($ivl_rwait_total, $ivl_wwait_total) = (0, 0);
 
     HOST: foreach my $host ( @sorted_host_list ) {
         my $hostname = $host;
@@ -290,56 +293,71 @@ FOREVER: while ( 1 ) {
         }
 
         # network
-        printf "%s% ${hostname_pad}s: %s% 13s %s% 13s %s% 13s%s",
+        printf "%s% ${hostname_pad}s: %s% 13s %s% 13s  %s% 13s%s  ",
             WHITE, $hostname,
-            net_c($diff{$host}->[0] + $diff{$host}->[1], 2),
-            net_c($diff{$host}->[0]),
-            net_c($diff{$host}->[1]),
+            io_c($diff{$host}->[2], 2), # total pps
+            net_c($diff{$host}->[0]),   # read bytes per second
+            net_c($diff{$host}->[1]),   # write bytes per second
             RESET;
 
         # disk iops
-        printf "%s%12s/s %s%12s/s     ",
+        printf "%s%8s  %s%8s ",
             io_c($diff{$host}->[4]),
             io_c($diff{$host}->[5]);
 
-        # load average
-        printf "%s%5s %s%5s %s%5s %s%s%s\n",
-            la_c($current->{$host}{la_short}),
-            la_c($current->{$host}{la_medium}),
-            la_c($current->{$host}{la_long}),
-            DKGRAY, $current->{$host}{comment} || '', RESET;
+		# iowait
+		my $avg_rwait = $diff{$host}->[6] / ($diff{$host}->[4] || 1);
+        my $avg_wwait = $diff{$host}->[7] / ($diff{$host}->[5] || 1);
+        printf "%s%8s %s%8s %s%s%s\n",
+            io_c($avg_rwait),
+            io_c($avg_wwait),
+		    DKGRAY, $current->{$host}{comment} || '', RESET;
 
+		# increment totals
         $host_count++;
-        $host_r_total += $diff{$host}->[0] + $diff{$host}->[2];
-        $host_s_total += $diff{$host}->[1] + $diff{$host}->[3];
-
-        $host_dr_total += $diff{$host}->[4];
-        $host_dw_total += $diff{$host}->[5];
+        $ivl_net_rx_total += $diff{$host}->[0] + $diff{$host}->[2];
+        $ivl_net_tx_total += $diff{$host}->[1] + $diff{$host}->[3];
+        $ivl_riops_total += $diff{$host}->[4];
+        $ivl_wiops_total += $diff{$host}->[5];
+        $ivl_rwait_total += $avg_rwait;
+        $ivl_wwait_total += $avg_wwait;
     }
 
-    #        W          C    V          W       C    V      W       C    V     W  V            C  V  W       C   V  W        R
-    printf "%sTotal:   %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s mbit/s) | %s% 6s %sread/s %s% 6s %swrite/s%s\n",
-        WHITE, net_c($host_r_total + $host_s_total, 2 * $host_count), WHITE, # wcvw
-        net_c($host_r_total, $host_count), WHITE,                            # cvw
-        net_c($host_s_total, $host_count), WHITE,                            # cvw
-        c((($host_r_total + $host_s_total)*8)/(2**20)),                      # v
-        io_c($host_dr_total, $host_count), WHITE,                            # cvw
-        io_c($host_dw_total, $host_count), WHITE,                            # cvw
+    printf "%sNetwork total:   %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s MiB/s)%s\n",
+        WHITE, net_c($ivl_net_rx_total + $ivl_net_tx_total, 2 * $host_count), WHITE,
+        net_c($ivl_net_rx_total, $host_count), WHITE,
+        net_c($ivl_net_tx_total, $host_count), WHITE,
+        c(($ivl_net_rx_total + $ivl_net_tx_total)/(2**20)),
         RESET;
-  
-    $total_send += $host_s_total;
-    $total_recv += $host_r_total;
-    $total_disk_read  += $host_dr_total;
-    $total_disk_write += $host_dw_total;
 
-    #        W          C    V          W       C    V      W       C    V     W  V            C  V  W       C   V  W        R
-    printf "%sAverage: %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s mbit/s) | %s%6s %sread/s %s%6s %swrite/s%s\n\n",
-        WHITE, net_c(($total_recv + $total_send) / $iterations, 2), WHITE, # wcvw
-        net_c(($total_recv / $iterations) / $host_count), WHITE,           # cvw
-        net_c(($total_send / $iterations) / $host_count), WHITE,           # cvw
-        c(((($total_recv + $total_send) / $iterations)*8)/(2**20)),        # v
-        io_c(($total_disk_read  / $iterations) / $host_count), WHITE,      # cvw
-        io_c(($total_disk_write / $iterations) / $host_count), WHITE,      # cvw
+    $total_net_tx += $ivl_net_tx_total;
+    $total_net_rx += $ivl_net_rx_total;
+
+    printf "%sNetwork average: %s% 13s         %sRecv: %s% 12s     %sSend: %s% 12s    %s(%s MiB/s)%s\n",
+        WHITE, net_c(($total_net_rx + $total_net_tx) / $iterations, 2), WHITE,
+        net_c(($total_net_rx / $iterations) / $host_count), WHITE,
+        net_c(($total_net_tx / $iterations) / $host_count), WHITE,
+        c((($total_net_rx + $total_net_tx) / $iterations)/(2**20)),
+        RESET;
+
+    $total_disk_riops += $ivl_riops_total;
+    $total_disk_wiops += $ivl_wiops_total;
+
+    printf "%sIOPS:      %s% 10s %stotal riops %s% 10s %stotal wiops %s% 6s %savg riops %s% 6s %savg wiops%s\n",
+        WHITE, io_c($ivl_riops_total, $host_count), WHITE,
+        io_c($ivl_wiops_total, $host_count), WHITE,
+        io_c(($total_disk_riops / $iterations) / $host_count), WHITE,
+        io_c(($total_disk_wiops / $iterations) / $host_count), WHITE,
+        RESET;
+
+    $total_disk_rwait += $ivl_rwait_total;
+    $total_disk_wwait += $ivl_wwait_total;
+
+    printf "%siowait ms: %s% 10s %stotal rwait %s% 10s %stotal wwait %s% 6s %savg rwait %s% 6s %savg wwait%s\n\n",
+        WHITE, io_c($ivl_rwait_total, $host_count), WHITE,
+        io_c($ivl_wwait_total, $host_count), WHITE,
+        io_c(($total_disk_rwait / $iterations) / $host_count), WHITE,
+        io_c(($total_disk_wwait / $iterations) / $host_count), WHITE,
         RESET;
 
     sleep $opt_interval;
