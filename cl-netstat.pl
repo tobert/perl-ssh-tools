@@ -169,8 +169,8 @@ sub cl_netstat {
            # 8 16 sdb 2640 380 18329 2860 1751748 13461886 121702720 249041290 78 2654720 249048720
            # 8 1  sda1 35383589 4096190 515794290 173085956 58990656 100542811 1276270912 205189188 0 135658516 378268412
            # EC2 machines get disks with partitions but not whole disks
-		   # TODO: sort out devices to make sure partitions are not double-counted with whole devices
-		   #
+           # TODO: sort out devices to make sure partitions are not double-counted with whole devices
+           #
            # from Documentation/iostats.txt:
            # Field  1 -- # of reads completed
            # Field  2 -- # of reads merged
@@ -231,18 +231,18 @@ sub diff_cl_netstat {
                   $tdiff = $s2->{$host}{$iface}{tbytes};
                 }
 
-				# 0: read_bytesps, 1: write_bytesps
+                # 0: read_bytesps, 1: write_bytesps
                 push @host_traffic, int($rdiff / $seconds), int($tdiff / $seconds);
-				# 2: total_byteps, 3: 0 (using an array here was silly, should be hash)
-				push @host_traffic, int($tput / $seconds), 0;
+                # 2: total_byteps, 3: 0 (using an array here was silly, should be hash)
+                push @host_traffic, int($tput / $seconds), 0;
             }
         }
 
-		# iops
+        # iops
         $host_traffic[4] = ($s1->{$host}{dsk_rds} - $s2->{$host}{dsk_rds}) / $seconds;
         $host_traffic[5] = ($s1->{$host}{dsk_wds} - $s2->{$host}{dsk_wds}) / $seconds;
 
-		# iowait
+        # iowait
         $host_traffic[6] = ($s1->{$host}{dsk_rwt} - $s2->{$host}{dsk_rwt});
         $host_traffic[7] = ($s1->{$host}{dsk_wwt} - $s2->{$host}{dsk_wwt});
 
@@ -274,11 +274,11 @@ FOREVER: while ( 1 ) {
         qw( hostname net_packets net_rx_bytes net_tx_bytes dsk_riops dsk_wiops rwait_ms wwait_ms );
     print CYAN, $header, $/, '-' x length($header), $/, RESET;
 
-	# iteration totals
-	my $host_count = 0;
-	my($ivl_net_rx_total, $ivl_net_tx_total) = (0, 0);
-	my($ivl_riops_total, $ivl_wiops_total) = (0, 0);
-	my($ivl_rwait_total, $ivl_wwait_total) = (0, 0);
+    # iteration totals
+    my $host_count = 0;
+    my($ivl_net_rx_total, $ivl_net_tx_total) = (0, 0);
+    my($ivl_riops_total, $ivl_wiops_total) = (0, 0);
+    my($ivl_rwait_total, $ivl_wwait_total) = (0, 0);
 
     HOST: foreach my $host ( @sorted_host_list ) {
         my $hostname = $host;
@@ -305,15 +305,15 @@ FOREVER: while ( 1 ) {
             io_c($diff{$host}->[4]),
             io_c($diff{$host}->[5]);
 
-		# iowait
-		my $avg_rwait = $diff{$host}->[6] / ($diff{$host}->[4] || 1);
+        # iowait
+        my $avg_rwait = $diff{$host}->[6] / ($diff{$host}->[4] || 1);
         my $avg_wwait = $diff{$host}->[7] / ($diff{$host}->[5] || 1);
         printf "%s%8s %s%8s %s%s%s\n",
             io_c($avg_rwait),
             io_c($avg_wwait),
-		    DKGRAY, $current->{$host}{comment} || '', RESET;
+            DKGRAY, $current->{$host}{comment} || '', RESET;
 
-		# increment totals
+        # increment totals
         $host_count++;
         $ivl_net_rx_total += $diff{$host}->[0] + $diff{$host}->[2];
         $ivl_net_tx_total += $diff{$host}->[1] + $diff{$host}->[3];
