@@ -15,7 +15,7 @@ cl-run.pl - run commands in parallel across the cluster
 
 This script parallelizes ssh access to hosts.
 
- cl-run.pl -s $SCRIPT    [-l $FILE] [-r $FILE] [-e $FILE] [-b] [-t] [-d] [-a] [-n] [-h]
+ cl-run.pl -s $SCRIPT    [-l $FILE] [-r $FILE] [-e $FILE] [-b] [-t] [-d] [-a] [-n] [-h] [-p "SCRIPT_PARAMS"]
  cl-run.pl -c '$COMMAND' [-l $FILE] [-r $FILE] [-e $FILE] [-b] [-t] [-d] [-a] [-n] [-h]
         -s: script/program to copy out then run
         -c: command to run on each host
@@ -53,12 +53,14 @@ our $remote_output     = undef;
 our $background        = undef;
 our $command           = undef;
 our $script            = undef;
+our $script_parameters = undef;
 our $sudo              = undef;
 our $nowrap            = undef;
 our $help              = undef;
 
 GetOptions(
     "s=s" => \$script,
+    "p=s" => \$script_parameters,
     "c=s" => \$command,
     "l=s" => \$local_output_file,
     "r=s" => \$remote_output,
@@ -110,7 +112,12 @@ sub runit {
         $shell = 'sudo /bin/bash';
     }
 
-    my @out = ssh( "$remote_user\@$host", "$shell $cmdfile" );
+    my @out = undef;
+    if ( $script && $script_parameters ) {
+        @out = ssh( "$remote_user\@$host", "$shell $cmdfile $script_parameters" );
+    } else {
+        @out = ssh( "$remote_user\@$host", "$shell $cmdfile" );
+    }
 
     my $fh;
     if ( $local_output_file ) {
